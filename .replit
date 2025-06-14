@@ -1,17 +1,11 @@
-# Dev-container modules (pin exact versions for reproducibility)
-# • nodejs-20.11 – needed by Vite/react scripts
-# • rust-1.78    – required for Solana program (`cargo build-bpf`)
-# • web          – Replit web preview tooling
-modules = ["nodejs-20.11", "rust-1.78", "web"]
-# Default run button → launch the Vite dev-server inside `frontend`
-run = ["sh", "-c", "cd frontend && npm install --legacy-peer-deps --no-audit --silent && npm run dev -- --host 0.0.0.0 --port 5000"]
+modules = ["nodejs-20", "rust-stable", "web", "bash"]
+run = "node index.js"
 
 [nix]
 channel = "stable-24_05"
 
 [deployment]
-build = ["sh", "-c", "cd frontend && npm install --legacy-peer-deps --no-audit --silent && npm run build"]
-run   = ["sh", "-c", "cd frontend && npm run preview -- --host 0.0.0.0 --port 5000"]
+run = ["sh", "-c", "node index.js"]
 
 # Environment variables expected by the app.
 # Configure real values via the Replit “Secrets” tab.
@@ -24,7 +18,7 @@ VITE_RPS_TOKEN_MINT="<optional_token_mint>"
 VITE_FEE_COLLECTOR_ACCOUNT="<fee_collector_pubkey>"
 
 [workflows]
-runButton = "Run Frontend Dev"
+runButton = "Run Frontend Prod"
 
 [[workflows.workflow]]
 name = "Run Frontend Dev"
