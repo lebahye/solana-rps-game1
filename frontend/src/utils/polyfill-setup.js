@@ -1,35 +1,21 @@
+// polyfill-setup.js
+// This file sets up polyfills for Node.js built-ins that are used by Solana libraries
+// but are not available in the browser.
 
-// Enhanced polyfill setup for browser compatibility with Node.js modules
 import { Buffer } from 'buffer';
 
-// Make Buffer available globally
+// Make Buffer globally available
 if (typeof window !== 'undefined') {
   window.Buffer = Buffer;
-  window.global = window.global || window;
-  
-  // Add process polyfill
-  window.process = window.process || {
-    env: {},
-    version: '',
-    platform: 'browser',
-    nextTick: (fn) => Promise.resolve().then(fn),
-    cwd: () => '/',
-    argv: []
-  };
+  window.global = window;
 
-  console.log('✓ Polyfills loaded - Buffer and process are now available');
-} else {
-  console.warn('⚠ Window object not available - running in non-browser environment');
+  // Add process polyfill
+  if (!window.process) {
+    window.process = require('process/browser');
+  }
 }
 
-// Additional crypto polyfill for older browsers
-if (typeof window !== 'undefined' && !window.crypto) {
-  window.crypto = {
-    getRandomValues: (arr) => {
-      for (let i = 0; i < arr.length; i++) {
-        arr[i] = Math.floor(Math.random() * 256);
-      }
-      return arr;
-    }
-  };
+// Also make it available for Node.js environments
+if (typeof global !== 'undefined') {
+  global.Buffer = Buffer;
 }

@@ -41,6 +41,7 @@ import audioService from './services/audio-service';
 import { BackgroundMusic } from './services/audio-service';
 
 // Error boundary component
+import ErrorBoundary from './components/ErrorBoundary';
 class ErrorBoundary extends Component<{children: React.ReactNode}, {hasError: boolean, error: Error | null}> {
   constructor(props: {children: React.ReactNode}) {
     super(props);
