@@ -1,0 +1,523 @@
+/* frontend/src/components/GameTournament.css */
+
+/* --- Root Variables (from App.css for consistency, or define tournament-specific ones) --- */
+:root {
+  --tournament-bg: var(--surface-color, #1f1f3a);
+  --tournament-header-bg: var(--background-color, #1a1a2e);
+  --tournament-border-color: var(--primary-color, #4a90e2);
+  --tournament-accent-color: var(--accent-color, #f5a623);
+  --tournament-text-color: var(--text-color, #e0e0e0);
+  --tournament-text-secondary: var(--text-color-dark, #a0a0a0);
+  --match-box-bg: var(--choice-bg-color, #2a2a4a);
+  --winner-glow-color: var(--success-color, #2ecc71);
+  --connector-line-color: var(--primary-color-translucent, rgba(74, 144, 226, 0.3));
+  --current-user-highlight: var(--secondary-color, #50e3c2);
+  --button-hover-bg: var(--primary-color-darker, #3a80d2);
+}
+
+/* --- General Tournament Styles --- */
+.game-tournament {
+  background-color: var(--tournament-bg);
+  padding: 20px;
+  border-radius: var(--border-radius, 8px);
+  box-shadow: var(--box-shadow, 0 4px 15px rgba(0, 0, 0, 0.2));
+  margin-bottom: 30px;
+  animation: fadeIn 0.5s ease-out;
+}
+
+.tournament-header {
+  text-align: center;
+  margin-bottom: 25px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--tournament-border-color);
+}
+
+.tournament-header h2 {
+  color: var(--tournament-accent-color);
+  font-size: 2.2rem;
+  margin-bottom: 10px;
+}
+
+.tournament-info {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 20px; /* row-gap column-gap */
+  color: var(--tournament-text-secondary);
+  font-size: 0.95rem;
+}
+
+.tournament-info span strong {
+  color: var(--tournament-text-color);
+  font-weight: 600;
+}
+
+.status-registering { color: var(--primary-color, #4a90e2); }
+.status-inprogress { color: var(--accent-color, #f5a623); }
+.status-finished { color: var(--success-color, #2ecc71); }
+.status-cancelled { color: var(--error-color, #e74c3c); }
+
+.tournament-actions {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.tournament-actions button {
+  margin: 5px;
+  padding: 12px 25px;
+  font-size: 1.1rem;
+}
+
+.tournament-player-list {
+  margin: 20px auto;
+  padding: 15px;
+  background-color: var(--match-box-bg);
+  border-radius: var(--border-radius);
+  max-width: 500px;
+}
+.tournament-player-list h4 {
+  color: var(--tournament-accent-color);
+  margin-top: 0;
+  margin-bottom: 10px;
+  text-align: center;
+}
+.tournament-player-list ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.tournament-player-list li {
+  background-color: var(--tournament-bg);
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  color: var(--tournament-text-secondary);
+}
+.tournament-player-list li.current-user-player {
+  color: var(--current-user-highlight);
+  font-weight: bold;
+  border: 1px solid var(--current-user-highlight);
+}
+
+
+/* --- Modal Styles (for Create Tournament) --- */
+.modal-overlay { /* Re-using App.css styles if defined, or define here */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0,0,0,0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1010; /* Higher than wallet modal */
+  animation: fadeIn 0.3s ease-out;
+}
+
+.modal-content.create-tournament-modal {
+  background-color: var(--tournament-bg);
+  padding: 25px 30px;
+  border-radius: var(--border-radius);
+  box-shadow: 0 5px 25px rgba(0,0,0,0.4);
+  width: 90%;
+  max-width: 500px;
+  border-top: 3px solid var(--tournament-accent-color);
+}
+
+.create-tournament-modal h3 {
+  color: var(--tournament-accent-color);
+  text-align: center;
+  margin-top: 0;
+  margin-bottom: 20px;
+}
+
+.create-tournament-modal .form-group { /* Assuming .form-group is styled in App.css */
+  margin-bottom: 15px;
+}
+.create-tournament-modal .form-group label {
+  color: var(--tournament-text-secondary);
+}
+
+.create-tournament-modal .modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 25px;
+}
+
+/* --- Bracket Styles --- */
+.tournament-brackets-container {
+  display: flex;
+  overflow-x: auto; /* Enable horizontal scrolling for brackets */
+  padding: 20px 10px;
+  gap: 40px; /* Gap between rounds */
+  align-items: flex-start; /* Align rounds at the top */
+  min-height: 300px; /* Ensure there's space for connectors */
+  position: relative; /* For pseudo-element connectors if needed */
+}
+
+.bracket-round {
+  display: flex;
+  flex-direction: column;
+  gap: 30px; /* Vertical gap between matches in a round */
+  min-width: 220px; /* Min width for a round column */
+}
+
+.round-title {
+  text-align: center;
+  color: var(--tournament-accent-color);
+  font-size: 1.4rem;
+  margin-bottom: 10px;
+  font-weight: bold;
+}
+
+.round-matches {
+    display: flex;
+    flex-direction: column;
+    gap: 50px; /* Increased gap to accommodate connectors */
+    align-items: center; /* Center match boxes within the round column */
+}
+
+.match-wrapper {
+    position: relative; /* For connector lines */
+    display: flex; /* To align match box and horizontal connector */
+    align-items: center;
+}
+
+.bracket-match-node {
+  display: flex; /* Align lines and match box */
+  align-items: center;
+  position: relative; /* For absolute positioned elements within if needed */
+}
+
+.bracket-lines {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 20px; /* Width of the area for vertical lines */
+  margin-right: 5px; /* Space before the match box */
+  align-self: stretch; /* Make lines container take full height of match node */
+}
+
+.bracket-lines .line-top,
+.bracket-lines .line-bottom {
+  width: 2px;
+  background-color: var(--connector-line-color);
+  flex-grow: 1; /* Make lines extend */
+}
+.bracket-lines .line-top {
+  height: 50%; /* Adjust as needed */
+}
+.bracket-lines .line-bottom {
+  height: 50%; /* Adjust as needed */
+}
+
+.bracket-lines .line-middle {
+  width: 10px; /* Length of the small horizontal line pointing to the box */
+  height: 2px;
+  background-color: var(--connector-line-color);
+}
+
+.connector-line-horizontal {
+    width: 20px; /* Length of the horizontal line connecting to the next round's match */
+    height: 2px;
+    background-color: var(--connector-line-color);
+    /* This line connects the output of a match box to the vertical line of the next round's match */
+}
+
+
+.bracket-match-box {
+  background-color: var(--match-box-bg);
+  border: 1px solid var(--tournament-border-color);
+  border-radius: var(--border-radius);
+  padding: 12px 15px;
+  width: 200px; /* Fixed width for match boxes */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+}
+.bracket-match-box:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.player-slot {
+  padding: 8px;
+  background-color: var(--tournament-bg);
+  border-radius: 4px;
+  color: var(--tournament-text-color);
+  font-size: 0.95rem;
+  text-align: center;
+  min-height: 30px; /* Ensure consistent height */
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* For name and score */
+  border: 1px solid transparent; /* For hover/active states */
+  transition: background-color 0.2s;
+}
+.player-slot.current-user {
+  border-color: var(--current-user-highlight);
+  color: var(--current-user-highlight);
+  font-weight: bold;
+}
+.player-slot.winner {
+  background-color: var(--winner-glow-color);
+  color: var(--tournament-bg) !important; /* Dark text on light green */
+  font-weight: bold;
+  animation: pulseWinner 1.5s infinite alternate;
+}
+.player-score {
+    font-size: 0.8em;
+    color: var(--tournament-text-secondary);
+    margin-left: 8px;
+    background-color: rgba(0,0,0,0.2);
+    padding: 2px 5px;
+    border-radius: 3px;
+}
+.player-slot.winner .player-score {
+    color: var(--tournament-bg);
+}
+
+
+.vs-divider {
+  text-align: center;
+  color: var(--tournament-text-secondary);
+  font-size: 0.8rem;
+  font-weight: bold;
+  margin: -2px 0;
+}
+
+.match-status-text {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--tournament-text-secondary);
+  margin-top: 5px;
+  font-style: italic;
+}
+.match-status-text.winner-text {
+  color: var(--winner-glow-color);
+  font-weight: bold;
+  font-style: normal;
+  animation: fadeIn 0.5s;
+}
+
+.play-match-button {
+  background-color: var(--tournament-accent-color);
+  color: var(--tournament-bg);
+  font-weight: bold;
+  padding: 8px 10px;
+  font-size: 0.9rem;
+  margin-top: 8px;
+  width: 100%;
+  border: none;
+  transition: background-color 0.2s, transform 0.2s;
+}
+.play-match-button:hover:not(:disabled) {
+  background-color: var(--button-hover-bg); /* Define this or use a darker accent */
+  transform: scale(1.03);
+}
+.play-match-button:disabled {
+  background-color: #555;
+  cursor: not-allowed;
+}
+
+/* Status specific styling for match box */
+.bracket-match-node.completed .bracket-match-box {
+  border-left: 4px solid var(--success-color);
+}
+.bracket-match-node.inprogress .bracket-match-box {
+  border-left: 4px solid var(--accent-color);
+  animation: pulseBorder 1.5s infinite alternate;
+}
+.bracket-match-node.scheduled .bracket-match-box {
+  border-left: 4px solid var(--primary-color);
+}
+.bracket-match-node.bye .bracket-match-box {
+  border-left: 4px solid var(--tournament-text-secondary);
+  opacity: 0.7;
+}
+.bracket-match-node.bye .player-slot {
+    font-style: italic;
+}
+
+
+/* --- Winner Announcement --- */
+.tournament-winner-announcement {
+  text-align: center;
+  padding: 30px;
+  margin-top: 20px;
+  background-color: var(--match-box-bg);
+  border-radius: var(--border-radius);
+  border: 2px solid var(--tournament-accent-color);
+  animation: slideUpIn 0.7s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+.tournament-winner-announcement h3 {
+  color: var(--tournament-accent-color);
+  font-size: 2rem;
+}
+.tournament-winner-announcement .winner-name {
+  font-size: 1.8rem;
+  color: var(--winner-glow-color);
+  font-weight: bold;
+  margin: 10px 0;
+  animation: pulseWinnerName 2s infinite;
+}
+
+/* --- Animations --- */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUpIn {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulseBorder {
+  0% { border-left-color: var(--accent-color); }
+  50% { border-left-color: var(--tournament-text-color); }
+  100% { border-left-color: var(--accent-color); }
+}
+
+@keyframes pulseWinner {
+  0% { box-shadow: 0 0 5px var(--winner-glow-color), inset 0 0 3px var(--winner-glow-color); }
+  50% { box-shadow: 0 0 15px var(--winner-glow-color), inset 0 0 8px var(--winner-glow-color); }
+  100% { box-shadow: 0 0 5px var(--winner-glow-color), inset 0 0 3px var(--winner-glow-color); }
+}
+
+@keyframes pulseWinnerName {
+  0% { transform: scale(1); text-shadow: 0 0 5px var(--winner-glow-color); }
+  50% { transform: scale(1.05); text-shadow: 0 0 15px var(--winner-glow-color); }
+  100% { transform: scale(1); text-shadow: 0 0 5px var(--winner-glow-color); }
+}
+
+/* --- Loading & Error States --- */
+.tournament-loading, .tournament-active-loading { /* Assuming .loading-indicator is in App.css */
+  font-size: 1.2rem;
+  padding: 30px;
+  text-align: center;
+  color: var(--tournament-accent-color);
+}
+.tournament-error { /* Assuming .error-message is in App.css */
+  color: var(--error-color);
+  background-color: rgba(231, 76, 60, 0.1);
+  padding: 10px 15px;
+  border-radius: var(--border-radius);
+  margin: 15px 0;
+  border: 1px solid var(--error-color);
+  text-align: center;
+}
+
+
+/* --- Responsive Design --- */
+
+/* Medium screens (tablets) */
+@media (max-width: 1024px) {
+  .tournament-header h2 {
+    font-size: 1.8rem;
+  }
+  .tournament-info {
+    font-size: 0.9rem;
+  }
+  .bracket-round {
+    min-width: 200px; /* Slightly smaller rounds */
+    gap: 25px;
+  }
+  .bracket-match-box {
+    width: 180px; /* Smaller match boxes */
+    padding: 10px;
+  }
+  .player-slot {
+    font-size: 0.9rem;
+  }
+  .play-match-button {
+    font-size: 0.85rem;
+  }
+}
+
+/* Small screens (mobile) */
+@media (max-width: 768px) {
+  .game-tournament {
+    padding: 15px;
+  }
+  .tournament-header h2 {
+    font-size: 1.6rem;
+  }
+  .tournament-info {
+    flex-direction: column; /* Stack info items */
+    align-items: center;
+    gap: 8px;
+  }
+  .tournament-actions button {
+    padding: 10px 20px;
+    font-size: 1rem;
+    width: 100%;
+    max-width: 300px; /* Prevent overly wide buttons */
+    box-sizing: border-box;
+  }
+  .tournament-player-list {
+    padding: 10px;
+  }
+  .tournament-player-list li {
+    font-size: 0.85rem;
+  }
+
+  .tournament-brackets-container {
+    gap: 20px; /* Smaller gap between rounds */
+    padding: 15px 5px; /* Less padding */
+  }
+  .bracket-round {
+    min-width: 170px; /* Even smaller rounds */
+    gap: 20px;
+  }
+  .round-title {
+    font-size: 1.2rem;
+  }
+  .bracket-match-box {
+    width: 160px; /* Smaller match boxes */
+    padding: 8px;
+  }
+  .player-slot {
+    font-size: 0.85rem;
+    min-height: 26px;
+  }
+  .vs-divider {
+    font-size: 0.75rem;
+  }
+  .play-match-button {
+    font-size: 0.8rem;
+    padding: 6px 8px;
+  }
+  .create-tournament-modal {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .tournament-header h2 {
+    font-size: 1.4rem;
+  }
+  .bracket-round {
+    min-width: 150px;
+  }
+  .bracket-match-box {
+    width: 140px;
+  }
+  .player-slot {
+    font-size: 0.8rem;
+  }
+  .tournament-winner-announcement h3 {
+    font-size: 1.6rem;
+  }
+  .tournament-winner-announcement .winner-name {
+    font-size: 1.4rem;
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "testDate": "2025-04-06T16:10:29.095Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "arm64",
+    "nodeVersion": "v22.14.0"
+  },
+  "results": [
+    {
+      "name": "Commitment Hash Generation",
+      "description": "Measures the performance of generating commitment hashes",
+      "iterations": 1000,
+      "concurrentGames": 1,
+      "averageTimeMs": 0.01,
+      "operationsPerSecond": 100000,
+      "totalTimeMs": 10
+    },
+    {
+      "name": "Game State Transition",
+      "description": "Measures the performance of game state transitions",
+      "iterations": 1000,
+      "concurrentGames": 1,
+      "averageTimeMs": 0.02,
+      "operationsPerSecond": 50000,
+      "totalTimeMs": 20
+    },
+    {
+      "name": "Multi-Player Game Simulation",
+      "description": "Simulates a complete multi-player game cycle",
+      "iterations": 100,
+      "concurrentGames": 1,
+      "averageTimeMs": 0.06,
+      "operationsPerSecond": 16666,
+      "totalTimeMs": 6
+    },
+    {
+      "name": "Concurrent Games",
+      "description": "Measures performance with multiple concurrent games",
+      "iterations": 10,
+      "concurrentGames": 5,
+      "averageTimeMs": 2.06,
+      "operationsPerSecond": 485,
+      "totalTimeMs": 103
+    },
+    {
+      "name": "Choice Verification",
+      "description": "Measures the performance of verifying player choices",
+      "iterations": 1000,
+      "concurrentGames": 1,
+      "averageTimeMs": 0.002,
+      "operationsPerSecond": 500000,
+      "totalTimeMs": 2
+    }
+  ]
+}

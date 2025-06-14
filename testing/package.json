@@ -1,0 +1,52 @@
+{
+  "name": "solana-rps-game-testing",
+  "version": "1.0.0",
+  "description": "Testing suite for Solana Rock Paper Scissors game",
+  "main": "index.js",
+  "scripts": {
+    "generate-wallets": "ts-node --transpile-only scripts/generate-wallets.ts",
+    "fund-wallets": "ts-node --transpile-only scripts/fund-wallets.ts",
+    "fund-single-wallet": "ts-node --transpile-only scripts/fund-single-wallet.ts",
+    "check-balances": "ts-node --transpile-only scripts/check-wallet-balance.ts",
+    "test-fairness": "ts-node --transpile-only scripts/test-fairness.ts",
+    "test-fee-collection": "ts-node --transpile-only scripts/test-fee-collection.ts",
+    "test-user-experience": "ts-node --transpile-only scripts/test-user-experience.ts",
+    "test-security": "ts-node --transpile-only scripts/test-security.ts",
+    "test-load": "ts-node --transpile-only scripts/test-load.ts",
+    "test-basic": "ts-node --transpile-only scripts/basic-test.ts",
+    "test-mock-fairness": "ts-node --transpile-only scripts/mock-fairness-test.ts",
+    "test-mock-fee": "ts-node --transpile-only scripts/mock-fee-test.ts",
+    "test-mock-ux": "ts-node --transpile-only scripts/mock-ux-test.ts",
+    "test-mock-security": "ts-node --transpile-only scripts/mock-security-test.ts",
+    "test-performance": "ts-node --transpile-only scripts/performance-benchmark.ts",
+    "test-e2e": "ts-node --transpile-only scripts/e2e-integration-test.ts",
+    "run-basic-tests": "npm run test-basic",
+    "run-mock-fairness-tests": "npm run test-mock-fairness",
+    "run-mock-security-tests": "npm run test-mock-security",
+    "run-performance-tests": "npm run test-performance",
+    "run-e2e-tests": "npm run test-e2e",
+    "run-all-mock-tests": "npm run test-basic && npm run test-mock-fairness && npm run test-mock-fee && npm run test-mock-ux && npm run test-mock-security && npm run test-performance && npm run test-e2e",
+    "run-all-tests": "npm run test-fairness && npm run test-fee-collection && npm run test-user-experience && npm run test-security && npm run test-load",
+    "setup-and-test": "npm run generate-wallets && npm run fund-wallets && npm run run-all-tests",
+    "test-comprehensive": "echo \"Running Comprehensive Test Suite\" && npm run test-basic && echo \"\n-------------------------------\n\" && npm run test-mock-fairness && echo \"\n-------------------------------\n\" && npm run test-mock-fee && echo \"\n-------------------------------\n\" && npm run test-mock-security && echo \"\n-------------------------------\n\" && npm run test-performance && echo \"\n-------------------------------\n\" && npm run test-e2e && echo \"\n-------------------------------\n\" && echo \"Comprehensive Testing Complete\"",
+    "generate-dashboard": "ts-node --transpile-only scripts/generate-dashboard.ts",
+    "run-tests-and-dashboard": "npm run run-all-mock-tests && npm run generate-dashboard"
+  },
+  "dependencies": {
+    "@project-serum/anchor": "^0.26.0",
+    "@solana/spl-token": "^0.4.0",
+    "@solana/web3.js": "^1.98.0",
+    "borsh": "^2.0.0",
+    "bs58": "^5.0.0",
+    "chalk": "^4.1.2",
+    "dotenv": "^16.4.5",
+    "fs-extra": "^11.2.0",
+    "js-sha256": "^0.11.0"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^20.11.30",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.2"
+  }
+}

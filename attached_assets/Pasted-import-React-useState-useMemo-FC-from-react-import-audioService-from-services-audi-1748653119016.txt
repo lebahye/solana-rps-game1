@@ -1,0 +1,158 @@
+import React, { useState, useEffect, useMemo, FC } from 'react';
+import { audioService } from '../services/audio-service'; // Adjust path if necessary
+
+// GameMove enum should match the definition in App.tsx and the smart contract
+export enum GameMove {
+  Rock = 0,
+  Paper = 1,
+  Scissors = 2,
+}
+
+interface MoveOption {
+  value: GameMove;
+  name: string;
+  iconSrc: string;
+}
+
+interface GameMoveSelectorProps {
+  onSelectMove: (move: GameMove) => void;
+  disabled: boolean;
+  currentSelection?: GameMove | null; // Optional prop to set initial/controlled selection
+}
+
+export const GameMoveSelector: FC<GameMoveSelectorProps> = ({
+  onSelectMove,
+  disabled,
+  currentSelection = null,
+}) => {
+  const [selectedMove, setSelectedMove] = useState<GameMove | null>(currentSelection);
+
+  useEffect(() => {
+    setSelectedMove(currentSelection);
+  }, [currentSelection]);
+
+  const moveOptions: MoveOption[] = useMemo(
+    () => [
+      { value: GameMove.Rock, name: 'Rock', iconSrc: '/assets/rock.svg' },
+      { value: GameMove.Paper, name: 'Paper', iconSrc: '/assets/paper.svg' },
+      { value: GameMove.Scissors, name: 'Scissors', iconSrc: '/assets/scissors.svg' },
+    ],
+    []
+  );
+
+  const handleMoveSelection = (move: GameMove) => {
+    if (disabled) return;
+
+    setSelectedMove(move);
+    audioService.playSound('moveSelect'); // Uses the updated AudioService
+
+    // Apply animation effect - this requires CSS definitions elsewhere
+    // Targeting the button by its specific value for more robust animation handling
+    const element = document.getElementById(`move-button-${move}`);
+    if (element) {
+      element.classList.add('move-button-selected-animation');
+      // Remove the class after animation completes to allow re-triggering
+      setTimeout(() => {
+        element.classList.remove('move-button-selected-animation');
+      }, 500); // Duration should match CSS animation
+    }
+
+    onSelectMove(move);
+  };
+
+  return (
+    <div className="game-move-selector" data-testid="game-move-selector">
+      {moveOptions.map((move) => (
+        <button
+          key={move.value}
+          id={`move-button-${move.value}`} // Unique ID for each button
+          className={`move-button ${selectedMove === move.value ? 'selected' : ''}`}
+          onClick={() => handleMoveSelection(move.value)}
+          disabled={disabled}
+          aria-label={`Select ${move.name}`}
+          data-testid={`select-${move.name.toLowerCase()}`}
+        >
+          <img src={move.iconSrc} alt={move.name} className="move-icon" />
+          <span className="move-label">{move.name}</span>
+        </button>
+      ))}
+      {/* 
+        Styles are defined using JSX-styled-components pattern.
+        Ensure CSS variables like --card-background, --border-radius, --accent-color, 
+        --secondary-color, --text-color are defined in a global CSS file (e.g., index.css or App.css).
+        The @keyframes for 'pulseEffect' should also be defined globally.
+      */}
+      <style jsx>{`
+        .game-move-selector {
+          display: flex;
+          justify-content: space-around;
+          align-items: center;
+          padding: 20px 0; /* Reduced top/bottom padding if used within another padded container */
+          gap: 10px; /* Reduced gap for tighter layout */
+          margin-bottom: 20px;
+        }
+        .move-button {
+          background-color: var(--card-background, #2a2a2e); /* Slightly different default */
+          border: 3px solid transparent; /* Thicker border for better visual feedback */
+          border-radius: var(--border-radius, 16px); /* More pronounced rounding */
+          padding: 12px; /* Adjusted padding */
+          cursor: pointer;
+          transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), 
+                      border-color 0.25s ease-in-out, 
+                      box-shadow 0.25s ease-in-out;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          min-width: 90px; /* Adjusted min-width */
+          box-shadow: 0 5px 10px rgba(0,0,0,0.25);
+          color: var(--text-color, #FFFFFF);
+        }
+        .move-button:hover:not(:disabled) {
+          transform: translateY(-6px) scale(1.08); /* Enhanced hover effect */
+          border-color: var(--accent-color, #00C2FF);
+          box-shadow: 0 8px 18px rgba(0, 194, 255, 0.35);
+        }
+        .move-button.selected {
+          border-color: var(--secondary-color, #14F195);
+          transform: scale(1.12); /* Slightly larger scale for selected */
+          box-shadow: 0 10px 20px rgba(20, 241, 149, 0.45);
+          background-color: rgba(20, 241, 149, 0.1); /* Subtle background tint for selected */
+        }
+        .move-button:disabled {
+          opacity: 0.4; /* More pronounced disabled state */
+          cursor: not-allowed;
+          box-shadow: none;
+          transform: none;
+        }
+        .move-icon {
+          width: 50px; /* Adjusted icon size */
+          height: 50px;
+          margin-bottom: 8px; /* Adjusted margin */
+          pointer-events: none; /* Prevent img from capturing clicks */
+        }
+        .move-label {
+          font-size: 0.95em; /* Slightly adjusted font size */
+          font-weight: 600;
+          pointer-events: none; /* Prevent span from capturing clicks */
+        }
+
+        /* 
+          Define this animation in your global CSS file (e.g., App.css or index.css)
+          for the 'move-button-selected-animation' class to take effect.
+        */
+        /*
+        @keyframes pulseEffect {
+          0% { transform: scale(1.12); } // Start from selected scale
+          50% { transform: scale(1.20); } // Pulse slightly larger
+          100% { transform: scale(1.12); } // Return to selected scale
+        }
+        .move-button-selected-animation {
+          animation: pulseEffect 0.5s ease-out;
+        }
+        */
+      `}</style>
+    </div>
+  );
+};
+
+export default GameMoveSelector;

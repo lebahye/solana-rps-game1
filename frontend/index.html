@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Viewport for responsive design -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png"> <!-- Optional: For iOS home screen icon -->
+
+    <!-- SEO and Social Sharing Meta Tags -->
+    <title>Solana RPS Game - Play Rock Paper Scissors On-Chain</title>
+    <meta name="description" content="Challenge players in a decentralized Rock Paper Scissors game on the Solana blockchain. Fair, transparent, and fun!" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://your-game-url.com/" /> <!-- Replace with actual URL -->
+    <meta property="og:title" content="Solana RPS Game - Play Rock Paper Scissors On-Chain" />
+    <meta property="og:description" content="Challenge players in a decentralized Rock Paper Scissors game on the Solana blockchain. Fair, transparent, and fun!" />
+    <meta property="og:image" content="https://your-game-url.com/og-image.png" /> <!-- Replace with actual image URL (e.g., 1200x630px) -->
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://your-game-url.com/" /> <!-- Replace with actual URL -->
+    <meta property="twitter:title" content="Solana RPS Game - Play Rock Paper Scissors On-Chain" />
+    <meta property="twitter:description" content="Challenge players in a decentralized Rock Paper Scissors game on the Solana blockchain. Fair, transparent, and fun!" />
+    <meta property="twitter:image" content="https://your-game-url.com/twitter-image.png" /> <!-- Replace with actual image URL (e.g., 800x418px) -->
+
+    <!-- Theme Color for Browser UI -->
+    <meta name="theme-color" content="#1a1a2e" /> <!-- Matches --background-color from App.css -->
+
+    <!-- Font Loading (Montserrat as per App.css) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Preload font stylesheet for faster first paint -->
+    <link
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap"
+      onload="this.onload=null;this.rel='stylesheet'"
+    />
+    <noscript
+      ><link
+        href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap"
+        rel="stylesheet"
+    /></noscript>
+    
+    <!-- Polyfills for legacy/edge browsers -->
+    <script nomodule src="/src/polyfill-bundle.js"></script>
+
+    <!-- Basic error-monitoring fallback -->
+    <script>
+      window.addEventListener('error', function (e) {
+        console.error('Global error captured:', e.message, e.filename, e.lineno);
+        /* TODO: integrate with real monitoring service (e.g., Sentry/Rollbar) */
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        console.error('Unhandled promise rejection:', e.reason);
+      });
+    </script>
+
+    <script type="module" src="/src/main.tsx"></script>
+  </head>
+  <body>
+    <noscript>
+      You need to enable JavaScript to run this application. 
+      This is a decentralized Rock Paper Scissors game on the Solana blockchain.
+    </noscript>
+    <div id="root"></div>
+  </body>
+</html>

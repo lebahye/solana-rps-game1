@@ -1,0 +1,13 @@
+{
+  "totalGames": 1000,
+  "rockWins": 122,
+  "paperWins": 114,
+  "scissorsWins": 113,
+  "ties": 325,
+  "rockWinPercentage": 18.074074074074073,
+  "paperWinPercentage": 16.88888888888889,
+  "scissorsWinPercentage": 16.74074074074074,
+  "tiePercentage": 32.5,
+  "isBalanced": false,
+  "maxVariance": 16.589259259259258
+}

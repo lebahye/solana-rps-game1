@@ -1,0 +1,38 @@
+
+[package]
+name = "solana-rps"
+version = "0.1.0"
+description = "Rock Paper Scissors game on Solana blockchain"
+edition = "2021"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+anchor-lang = "0.29.0"
+anchor-spl = "0.29.0"
+solana-program = "1.17.0"
+thiserror = "1.0.50"
+
+[dev-dependencies]
+solana-sdk = "1.17.0"
+solana-program-test = "1.17.0"
+anchor-client = "0.29.0"
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1
+
+[profile.release.build-override]
+opt-level = 3
+incremental = false
+codegen-units = 1

@@ -1,0 +1,17 @@
+{
+  "testDate": "2025-04-06T16:10:11.111Z",
+  "transactionCount": 100,
+  "wagerAmounts": [
+    0.01,
+    0.05,
+    0.1,
+    0.5,
+    1
+  ],
+  "expectedFeePercentage": 0.001,
+  "actualFeePercentage": 0.1000395915445577,
+  "totalWagered": 38.65000000000002,
+  "totalFees": 0.03866530213197157,
+  "isCorrect": true,
+  "differencePercentage": 0.00003959154455769609
+}

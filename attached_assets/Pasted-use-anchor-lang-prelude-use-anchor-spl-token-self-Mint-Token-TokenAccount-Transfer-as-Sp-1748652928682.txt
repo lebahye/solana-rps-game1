@@ -1,0 +1,364 @@
+use anchor_lang::prelude::*;
+use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer as SplTransfer};
+use anchor_lang::solana_program::{
+    program::invoke_signed,
+    system_instruction,
+};
+use std::convert::TryFrom;
+
+// RPS token mint address - should be replaced with actual deployed mint
+pub const RPS_TOKEN_MINT: &str = "RPSTokenMint111111111111111111111111111111";
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum WagerCurrency {
+    Sol,
+    RpsToken,
+}
+
+pub fn get_rps_mint() -> Pubkey {
+    Pubkey::try_from(RPS_TOKEN_MINT).unwrap_or_else(|_| panic!("Invalid RPS token mint address"))
+}
+
+// Initialize a token account for a user if they don't have one
+pub fn initialize_token_account<'info>(
+    payer: &Signer<'info>,
+    user: &Pubkey,
+    mint: &Account<'info, Mint>,
+    token_program: &Program<'info, Token>,
+    system_program: &Program<'info, System>,
+    rent: &Sysvar<'info, Rent>,
+) -> Result<()> {
+    // Find PDA for the user's token account
+    let (token_account_pda, bump) = Pubkey::find_program_address(
+        &[b"token-account", user.as_ref(), mint.key().as_ref()],
+        &crate::ID,
+    );
+
+    // Create the token account if it doesn't exist
+    let token_account_len = TokenAccount::LEN;
+    let lamports = rent.minimum_balance(token_account_len);
+
+    // Create account instruction
+    let create_account_ix = system_instruction::create_account(
+        &payer.key(),
+        &token_account_pda,
+        lamports,
+        token_account_len as u64,
+        &token_program.key(),
+    );
+
+    // Execute create account instruction
+    invoke_signed(
+        &create_account_ix,
+        &[
+            payer.to_account_info(),
+            system_program.to_account_info(),
+        ],
+        &[&[b"token-account", user.as_ref(), mint.key().as_ref(), &[bump]]],
+    )?;
+
+    // Initialize token account
+    token::initialize_account(
+        CpiContext::new(
+            token_program.to_account_info(),
+            token::InitializeAccount {
+                account: token_account_pda.clone().to_account_info(),
+                mint: mint.to_account_info(),
+                authority: user.clone().to_account_info(),
+                rent: rent.to_account_info(),
+            },
+        ),
+    )?;
+
+    Ok(())
+}
+
+// Transfer tokens from one account to another
+pub fn transfer_tokens<'info>(
+    amount: u64,
+    from: &Account<'info, TokenAccount>,
+    to: &Account<'info, TokenAccount>,
+    authority: &Signer<'info>,
+    token_program: &Program<'info, Token>,
+) -> Result<()> {
+    token::transfer(
+        CpiContext::new(
+            token_program.to_account_info(),
+            SplTransfer {
+                from: from.to_account_info(),
+                to: to.to_account_info(),
+                authority: authority.to_account_info(),
+            },
+        ),
+        amount,
+    )?;
+
+    Ok(())
+}
+
+// Transfer tokens from a PDA-owned account
+pub fn transfer_tokens_from_pda<'info>(
+    amount: u64,
+    from: &Account<'info, TokenAccount>,
+    to: &Account<'info, TokenAccount>,
+    authority_pda: &AccountInfo<'info>,
+    token_program: &Program<'info, Token>,
+    seeds: &[&[u8]],
+    bump: u8,
+) -> Result<()> {
+    let seeds_with_bump = [seeds, &[&[bump]]].concat();
+    let seeds_slice: Vec<&[u8]> = seeds_with_bump.iter().map(|s| *s).collect();
+
+    token::transfer(
+        CpiContext::new_with_signer(
+            token_program.to_account_info(),
+            SplTransfer {
+                from: from.to_account_info(),
+                to: to.to_account_info(),
+                authority: authority_pda.clone(),
+            },
+            &[seeds_slice.as_slice()],
+        ),
+        amount,
+    )?;
+
+    Ok(())
+}
+
+// Get token account for a user and mint
+pub fn get_associated_token_address(wallet: &Pubkey, mint: &Pubkey) -> Pubkey {
+    let (token_account, _) = Pubkey::find_program_address(
+        &[
+            b"token-account",
+            wallet.as_ref(),
+            mint.as_ref(),
+        ],
+        &crate::ID,
+    );
+    token_account
+}
+
+// Check if user has enough tokens for a wager
+pub fn check_token_balance<'info>(
+    token_account: &Account<'info, TokenAccount>,
+    amount: u64,
+) -> Result<()> {
+    require!(
+        token_account.amount >= amount,
+        RPSTokenError::InsufficientTokenBalance
+    );
+    Ok(())
+}
+
+// Convert SOL to RPS tokens based on current exchange rate
+pub fn sol_to_rps_tokens(sol_amount: u64, exchange_rate: u64) -> u64 {
+    // Exchange rate is represented as RPS tokens per SOL * 10^9 (to handle decimals)
+    // For example, if 1 SOL = 100 RPS, exchange_rate would be 100_000_000_000
+    (sol_amount as u128 * exchange_rate as u128 / 1_000_000_000) as u64
+}
+
+// Convert RPS tokens to SOL based on current exchange rate
+pub fn rps_tokens_to_sol(token_amount: u64, exchange_rate: u64) -> u64 {
+    // Exchange rate is represented as RPS tokens per SOL * 10^9 (to handle decimals)
+    (token_amount as u128 * 1_000_000_000 / exchange_rate as u128) as u64
+}
+
+// Create token account if it doesn't exist
+pub fn ensure_token_account<'info>(
+    payer: &Signer<'info>,
+    user: &Pubkey,
+    mint: &Account<'info, Mint>,
+    token_program: &Program<'info, Token>,
+    system_program: &Program<'info, System>,
+    rent: &Sysvar<'info, Rent>,
+) -> Result<Pubkey> {
+    let token_account = get_associated_token_address(user, &mint.key());
+    
+    // Check if token account already exists
+    let account_info = token_account.to_account_info();
+    if account_info.data_is_empty() {
+        // Create token account if it doesn't exist
+        initialize_token_account(
+            payer,
+            user,
+            mint,
+            token_program,
+            system_program,
+            rent,
+        )?;
+    }
+    
+    Ok(token_account)
+}
+
+// Handle wager based on currency type
+pub fn handle_wager<'info>(
+    amount: u64,
+    currency: WagerCurrency,
+    player: &Signer<'info>,
+    game_account: &AccountInfo<'info>,
+    player_token_account: Option<&Account<'info, TokenAccount>>,
+    game_token_account: Option<&Account<'info, TokenAccount>>,
+    token_program: Option<&Program<'info, Token>>,
+    system_program: &Program<'info, System>,
+) -> Result<()> {
+    match currency {
+        WagerCurrency::Sol => {
+            // Transfer SOL from player to game account
+            let transfer_instruction = system_instruction::transfer(
+                &player.key(),
+                &game_account.key(),
+                amount,
+            );
+            
+            invoke_signed(
+                &transfer_instruction,
+                &[
+                    player.to_account_info(),
+                    game_account.clone(),
+                    system_program.to_account_info(),
+                ],
+                &[],
+            )?;
+        },
+        WagerCurrency::RpsToken => {
+            // Ensure token accounts are provided
+            let player_token = player_token_account.ok_or(RPSTokenError::MissingTokenAccount)?;
+            let game_token = game_token_account.ok_or(RPSTokenError::MissingTokenAccount)?;
+            let token_prog = token_program.ok_or(RPSTokenError::MissingTokenProgram)?;
+            
+            // Check player has enough tokens
+            check_token_balance(player_token, amount)?;
+            
+            // Transfer tokens from player to game account
+            transfer_tokens(
+                amount,
+                player_token,
+                game_token,
+                player,
+                token_prog,
+            )?;
+        }
+    }
+    
+    Ok(())
+}
+
+// Distribute prizes based on game result and currency
+pub fn distribute_prizes<'info>(
+    total_wager: u64,
+    fee_percentage: u64,
+    currency: WagerCurrency,
+    winner: &Pubkey,
+    game_account: &AccountInfo<'info>,
+    winner_token_account: Option<&Account<'info, TokenAccount>>,
+    fee_recipient_token_account: Option<&Account<'info, TokenAccount>>,
+    game_token_account: Option<&Account<'info, TokenAccount>>,
+    token_program: Option<&Program<'info, Token>>,
+    system_program: &Program<'info, System>,
+    game_seeds: &[&[u8]],
+    game_bump: u8,
+) -> Result<()> {
+    // Calculate fee and prize amount
+    let fee_amount = (total_wager * fee_percentage) / 100;
+    let prize_amount = total_wager - fee_amount;
+    
+    match currency {
+        WagerCurrency::Sol => {
+            // Transfer SOL prize to winner
+            let winner_ix = system_instruction::transfer(
+                &game_account.key(),
+                winner,
+                prize_amount,
+            );
+            
+            invoke_signed(
+                &winner_ix,
+                &[
+                    game_account.clone(),
+                    winner.to_account_info(),
+                    system_program.to_account_info(),
+                ],
+                &[&[game_seeds.concat().as_slice(), &[game_bump]]],
+            )?;
+            
+            // Transfer fee to platform
+            if fee_amount > 0 {
+                let fee_recipient = fee_recipient_token_account
+                    .map(|acc| acc.owner)
+                    .unwrap_or_else(|| panic!("Fee recipient not provided"));
+                
+                let fee_ix = system_instruction::transfer(
+                    &game_account.key(),
+                    &fee_recipient,
+                    fee_amount,
+                );
+                
+                invoke_signed(
+                    &fee_ix,
+                    &[
+                        game_account.clone(),
+                        fee_recipient.to_account_info(),
+                        system_program.to_account_info(),
+                    ],
+                    &[&[game_seeds.concat().as_slice(), &[game_bump]]],
+                )?;
+            }
+        },
+        WagerCurrency::RpsToken => {
+            // Ensure token accounts are provided
+            let game_token = game_token_account.ok_or(RPSTokenError::MissingTokenAccount)?;
+            let winner_token = winner_token_account.ok_or(RPSTokenError::MissingTokenAccount)?;
+            let fee_token = fee_recipient_token_account.ok_or(RPSTokenError::MissingTokenAccount)?;
+            let token_prog = token_program.ok_or(RPSTokenError::MissingTokenProgram)?;
+            
+            // Transfer tokens from game to winner
+            transfer_tokens_from_pda(
+                prize_amount,
+                game_token,
+                winner_token,
+                game_account,
+                token_prog,
+                game_seeds,
+                game_bump,
+            )?;
+            
+            // Transfer fee to platform
+            if fee_amount > 0 {
+                transfer_tokens_from_pda(
+                    fee_amount,
+                    game_token,
+                    fee_token,
+                    game_account,
+                    token_prog,
+                    game_seeds,
+                    game_bump,
+                )?;
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+// Token-specific errors
+#[error_code]
+pub enum RPSTokenError {
+    #[msg("Insufficient token balance for the operation")]
+    InsufficientTokenBalance,
+    
+    #[msg("Token account is required for this operation")]
+    MissingTokenAccount,
+    
+    #[msg("Token program is required for this operation")]
+    MissingTokenProgram,
+    
+    #[msg("Invalid token mint")]
+    InvalidTokenMint,
+    
+    #[msg("Failed to create token account")]
+    TokenAccountCreationFailed,
+    
+    #[msg("Failed to transfer tokens")]
+    TokenTransferFailed,
+}

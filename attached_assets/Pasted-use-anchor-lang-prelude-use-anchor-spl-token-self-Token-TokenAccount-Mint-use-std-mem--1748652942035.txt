@@ -1,0 +1,1432 @@
+use anchor_lang::prelude::*;
+use anchor_spl::token::{self, Token, TokenAccount, Mint};
+use std::mem::size_of;
+use anchor_lang::solana_program::{
+    program::invoke_signed,
+    system_instruction,
+    hash::{hash, Hash},
+};
+
+// Import our custom modules
+mod token_integration;
+mod admin;
+
+// Re-export types and functions from our modules
+pub use token_integration::{
+    WagerCurrency, 
+    get_rps_mint, 
+    handle_wager, 
+    distribute_prizes, 
+    get_associated_token_address,
+    check_token_balance,
+    sol_to_rps_tokens,
+    rps_tokens_to_sol,
+    RPSTokenError
+};
+
+pub use admin::{
+    AdminConfig, 
+    ADMIN_SEED, 
+    get_admin_pda, 
+    get_fee_vault_pda,
+    update_game_stats,
+    check_not_paused,
+    GameResult as AdminGameResult
+};
+
+declare_id!("RPS111111111111111111111111111111111111111");
+
+#[program]
+pub mod solana_rps {
+    use super::*;
+
+    // Platform fee percentage (1%)
+    const PLATFORM_FEE_PERCENT: u64 = 1;
+    
+    // Timeout duration in seconds (10 minutes)
+    const TIMEOUT_DURATION: i64 = 600;
+
+    // Initialize admin configuration
+    pub fn initialize_admin(
+        ctx: Context<InitializeAdmin>,
+        sol_fee_percent: u64,
+        rps_token_fee_percent: u64,
+        exchange_rate: u64,
+    ) -> Result<()> {
+        admin::initialize_admin(ctx, sol_fee_percent, rps_token_fee_percent, exchange_rate)
+    }
+
+    // Update fee configuration
+    pub fn update_fees(
+        ctx: Context<UpdateAdmin>,
+        sol_fee_percent: u64,
+        rps_token_fee_percent: u64,
+    ) -> Result<()> {
+        admin::update_fees(ctx, sol_fee_percent, rps_token_fee_percent)
+    }
+
+    // Update fee recipients
+    pub fn update_fee_recipients(
+        ctx: Context<UpdateAdmin>,
+        sol_fee_recipient: Pubkey,
+        rps_fee_recipient: Pubkey,
+    ) -> Result<()> {
+        admin::update_fee_recipients(ctx, sol_fee_recipient, rps_fee_recipient)
+    }
+
+    // Update exchange rate
+    pub fn update_exchange_rate(
+        ctx: Context<UpdateAdmin>,
+        exchange_rate: u64,
+    ) -> Result<()> {
+        admin::update_exchange_rate(ctx, exchange_rate)
+    }
+
+    // Pause or unpause the game
+    pub fn set_pause_state(
+        ctx: Context<UpdateAdmin>,
+        paused: bool,
+    ) -> Result<()> {
+        admin::set_pause_state(ctx, paused)
+    }
+
+    // Transfer admin authority
+    pub fn transfer_authority(
+        ctx: Context<TransferAuthority>,
+        new_authority: Pubkey,
+    ) -> Result<()> {
+        admin::transfer_authority(ctx, new_authority)
+    }
+
+    // Withdraw SOL fees
+    pub fn withdraw_sol_fees(
+        ctx: Context<WithdrawFees>,
+        amount: u64,
+    ) -> Result<()> {
+        admin::withdraw_sol_fees(ctx, amount)
+    }
+
+    // Withdraw RPS token fees
+    pub fn withdraw_rps_fees(
+        ctx: Context<WithdrawTokenFees>,
+        amount: u64,
+    ) -> Result<()> {
+        admin::withdraw_rps_fees(ctx, amount)
+    }
+
+    // Emergency fund recovery
+    pub fn emergency_recover_funds(
+        ctx: Context<EmergencyRecover>,
+        amount: u64,
+        is_token: bool,
+    ) -> Result<()> {
+        admin::emergency_recover_funds(ctx, amount, is_token)
+    }
+
+    // Initialize user profile
+    pub fn initialize_user_profile(ctx: Context<InitializeUserProfile>) -> Result<()> {
+        let profile = &mut ctx.accounts.user_profile;
+        let user = &ctx.accounts.user;
+        let clock = Clock::get()?;
+        
+        // Initialize profile
+        profile.user = user.key();
+        profile.games_played = 0;
+        profile.games_won = 0;
+        profile.games_lost = 0;
+        profile.games_drawn = 0;
+        profile.total_sol_wagered = 0;
+        profile.total_rps_wagered = 0;
+        profile.total_sol_won = 0;
+        profile.total_rps_won = 0;
+        profile.created_at = clock.unix_timestamp;
+        profile.last_played_at = 0;
+        profile.bump = *ctx.bumps.get("user_profile").unwrap();
+        
+        emit!(UserProfileCreatedEvent {
+            user: user.key(),
+            timestamp: clock.unix_timestamp,
+        });
+        
+        Ok(())
+    }
+
+    // Create a new game with a wager
+    pub fn create_game(
+        ctx: Context<CreateGame>,
+        wager_amount: u64,
+        player_seed: String,
+        currency: WagerCurrency,
+    ) -> Result<()> {
+        // Check if program is paused
+        check_not_paused(&ctx.accounts.admin_config)?;
+        
+        let game = &mut ctx.accounts.game;
+        let player = &ctx.accounts.player;
+        let admin_config = &ctx.accounts.admin_config;
+        let clock = Clock::get()?;
+
+        // Initialize game state
+        game.creator = player.key();
+        game.wager_amount = wager_amount;
+        game.state = GameState::Created;
+        game.creator_seed = player_seed;
+        game.created_at = clock.unix_timestamp;
+        game.last_action_at = clock.unix_timestamp;
+        game.bump = *ctx.bumps.get("game").unwrap();
+        game.currency = currency;
+        
+        // Get the appropriate fee percentage based on currency
+        let fee_percent = match currency {
+            WagerCurrency::Sol => admin_config.sol_fee_percent,
+            WagerCurrency::RpsToken => admin_config.rps_token_fee_percent,
+        };
+        game.fee_percent = fee_percent;
+
+        // Handle the wager based on currency
+        match currency {
+            WagerCurrency::Sol => {
+                // Transfer SOL from player to game account
+                let transfer_instruction = system_instruction::transfer(
+                    &player.key(),
+                    &game.key(),
+                    wager_amount,
+                );
+                
+                invoke_signed(
+                    &transfer_instruction,
+                    &[
+                        player.to_account_info(),
+                        game.to_account_info(),
+                        ctx.accounts.system_program.to_account_info(),
+                    ],
+                    &[],
+                )?;
+            },
+            WagerCurrency::RpsToken => {
+                // Ensure token accounts are provided
+                let player_token = ctx.accounts.player_token_account.as_ref()
+                    .ok_or(RPSTokenError::MissingTokenAccount)?;
+                let game_token = ctx.accounts.game_token_account.as_ref()
+                    .ok_or(RPSTokenError::MissingTokenAccount)?;
+                let token_program = ctx.accounts.token_program.as_ref()
+                    .ok_or(RPSTokenError::MissingTokenProgram)?;
+                
+                // Verify token mint
+                require!(
+                    player_token.mint == get_rps_mint(),
+                    RPSTokenError::InvalidTokenMint
+                );
+                require!(
+                    game_token.mint == get_rps_mint(),
+                    RPSTokenError::InvalidTokenMint
+                );
+                
+                // Check player has enough tokens
+                check_token_balance(player_token, wager_amount)?;
+                
+                // Transfer tokens from player to game account
+                token::transfer(
+                    CpiContext::new(
+                        token_program.to_account_info(),
+                        token::Transfer {
+                            from: player_token.to_account_info(),
+                            to: game_token.to_account_info(),
+                            authority: player.to_account_info(),
+                        },
+                    ),
+                    wager_amount,
+                )?;
+            }
+        }
+
+        // Update user profile if it exists
+        if let Some(profile) = &mut ctx.accounts.user_profile {
+            profile.games_played += 1;
+            profile.last_played_at = clock.unix_timestamp;
+            
+            match currency {
+                WagerCurrency::Sol => {
+                    profile.total_sol_wagered += wager_amount;
+                },
+                WagerCurrency::RpsToken => {
+                    profile.total_rps_wagered += wager_amount;
+                },
+            }
+        }
+
+        emit!(GameCreatedEvent {
+            game: game.key(),
+            creator: player.key(),
+            wager_amount,
+            currency,
+            timestamp: clock.unix_timestamp,
+        });
+
+        Ok(())
+    }
+
+    // Join an existing game
+    pub fn join_game(
+        ctx: Context<JoinGame>,
+        player_seed: String,
+    ) -> Result<()> {
+        // Check if program is paused
+        check_not_paused(&ctx.accounts.admin_config)?;
+        
+        let game = &mut ctx.accounts.game;
+        let player = &ctx.accounts.player;
+        let clock = Clock::get()?;
+
+        // Validate game state
+        require!(game.state == GameState::Created, RPSError::InvalidGameState);
+        require!(game.joiner.is_none(), RPSError::GameAlreadyJoined);
+        require!(game.creator != player.key(), RPSError::CannotJoinOwnGame);
+
+        // Update game state
+        game.joiner = Some(player.key());
+        game.joiner_seed = Some(player_seed);
+        game.state = GameState::Joined;
+        game.last_action_at = clock.unix_timestamp;
+
+        // Handle the wager based on currency
+        match game.currency {
+            WagerCurrency::Sol => {
+                // Transfer SOL from player to game account
+                let transfer_instruction = system_instruction::transfer(
+                    &player.key(),
+                    &game.key(),
+                    game.wager_amount,
+                );
+                
+                invoke_signed(
+                    &transfer_instruction,
+                    &[
+                        player.to_account_info(),
+                        game.to_account_info(),
+                        ctx.accounts.system_program.to_account_info(),
+                    ],
+                    &[],
+                )?;
+            },
+            WagerCurrency::RpsToken => {
+                // Ensure token accounts are provided
+                let player_token = ctx.accounts.player_token_account.as_ref()
+                    .ok_or(RPSTokenError::MissingTokenAccount)?;
+                let game_token = ctx.accounts.game_token_account.as_ref()
+                    .ok_or(RPSTokenError::MissingTokenAccount)?;
+                let token_program = ctx.accounts.token_program.as_ref()
+                    .ok_or(RPSTokenError::MissingTokenProgram)?;
+                
+                // Verify token mint
+                require!(
+                    player_token.mint == get_rps_mint(),
+                    RPSTokenError::InvalidTokenMint
+                );
+                require!(
+                    game_token.mint == get_rps_mint(),
+                    RPSTokenError::InvalidTokenMint
+                );
+                
+                // Check player has enough tokens
+                check_token_balance(player_token, game.wager_amount)?;
+                
+                // Transfer tokens from player to game account
+                token::transfer(
+                    CpiContext::new(
+                        token_program.to_account_info(),
+                        token::Transfer {
+                            from: player_token.to_account_info(),
+                            to: game_token.to_account_info(),
+                            authority: player.to_account_info(),
+                        },
+                    ),
+                    game.wager_amount,
+                )?;
+            }
+        }
+
+        // Update user profile if it exists
+        if let Some(profile) = &mut ctx.accounts.user_profile {
+            profile.games_played += 1;
+            profile.last_played_at = clock.unix_timestamp;
+            
+            match game.currency {
+                WagerCurrency::Sol => {
+                    profile.total_sol_wagered += game.wager_amount;
+                },
+                WagerCurrency::RpsToken => {
+                    profile.total_rps_wagered += game.wager_amount;
+                },
+            }
+        }
+
+        emit!(GameJoinedEvent {
+            game: game.key(),
+            joiner: player.key(),
+            wager_amount: game.wager_amount,
+            currency: game.currency,
+            timestamp: clock.unix_timestamp,
+        });
+
+        Ok(())
+    }
+
+    // Commit a move (Rock, Paper, or Scissors)
+    pub fn commit_move(
+        ctx: Context<CommitMove>,
+        move_hash: [u8; 32],
+    ) -> Result<()> {
+        // Check if program is paused
+        check_not_paused(&ctx.accounts.admin_config)?;
+        
+        let game = &mut ctx.accounts.game;
+        let player = &ctx.accounts.player;
+        let clock = Clock::get()?;
+
+        // Validate game state
+        require!(game.state == GameState::Joined, RPSError::InvalidGameState);
+        
+        // Update game state based on which player is committing
+        if player.key() == game.creator {
+            require!(game.creator_move_hash.is_none(), RPSError::MoveAlreadyCommitted);
+            game.creator_move_hash = Some(move_hash);
+        } else if Some(player.key()) == game.joiner {
+            require!(game.joiner_move_hash.is_none(), RPSError::MoveAlreadyCommitted);
+            game.joiner_move_hash = Some(move_hash);
+        } else {
+            return Err(RPSError::NotAPlayer.into());
+        }
+
+        // If both players have committed, change state
+        if game.creator_move_hash.is_some() && game.joiner_move_hash.is_some() {
+            game.state = GameState::MovesCommitted;
+        }
+
+        game.last_action_at = clock.unix_timestamp;
+
+        emit!(MoveCommittedEvent {
+            game: game.key(),
+            player: player.key(),
+            timestamp: clock.unix_timestamp,
+        });
+
+        Ok(())
+    }
+
+    // Reveal a previously committed move
+    pub fn reveal_move(
+        ctx: Context<RevealMove>,
+        move_choice: GameMove,
+        salt: String,
+    ) -> Result<()> {
+        // Check if program is paused
+        check_not_paused(&ctx.accounts.admin_config)?;
+        
+        let game = &mut ctx.accounts.game;
+        let player = &ctx.accounts.player;
+        let admin_config = &ctx.accounts.admin_config;
+        let clock = Clock::get()?;
+
+        // Validate game state
+        require!(game.state == GameState::MovesCommitted, RPSError::InvalidGameState);
+
+        // Verify the revealed move matches the committed hash
+        let move_data = format!("{}{}", move_choice.to_string(), salt);
+        let calculated_hash = hash(move_data.as_bytes()).to_bytes();
+
+        if player.key() == game.creator {
+            require!(game.creator_move.is_none(), RPSError::MoveAlreadyRevealed);
+            require!(
+                Some(calculated_hash) == game.creator_move_hash,
+                RPSError::InvalidMoveReveal
+            );
+            game.creator_move = Some(move_choice);
+            game.creator_salt = Some(salt);
+        } else if Some(player.key()) == game.joiner {
+            require!(game.joiner_move.is_none(), RPSError::MoveAlreadyRevealed);
+            require!(
+                Some(calculated_hash) == game.joiner_move_hash,
+                RPSError::InvalidMoveReveal
+            );
+            game.joiner_move = Some(move_choice);
+            game.joiner_salt = Some(salt);
+        } else {
+            return Err(RPSError::NotAPlayer.into());
+        }
+
+        // If both players have revealed, determine the winner and distribute prizes
+        if game.creator_move.is_some() && game.joiner_move.is_some() {
+            game.state = GameState::Completed;
+            
+            // Determine the winner
+            let creator_move = game.creator_move.unwrap();
+            let joiner_move = game.joiner_move.unwrap();
+            
+            let result = determine_winner(creator_move, joiner_move);
+            game.result = Some(result);
+            
+            // Calculate total prize and fee
+            let total_prize = game.wager_amount * 2;
+            let fee_amount = (total_prize * game.fee_percent) / 100;
+            
+            // Distribute prizes based on currency
+            match game.currency {
+                WagerCurrency::Sol => {
+                    // Determine fee recipient
+                    let fee_recipient = admin_config.sol_fee_recipient;
+                    
+                    // Determine prize distribution
+                    let (creator_amount, joiner_amount) = match result {
+                        GameResult::CreatorWon => (total_prize - fee_amount, 0),
+                        GameResult::JoinerWon => (0, total_prize - fee_amount),
+                        GameResult::Draw => (game.wager_amount, game.wager_amount),
+                        GameResult::Timeout => return Err(RPSError::InvalidGameState.into()),
+                    };
+                    
+                    // Transfer to creator if they won or it's a draw
+                    if creator_amount > 0 {
+                        let creator_ix = system_instruction::transfer(
+                            &game.key(),
+                            &game.creator,
+                            creator_amount,
+                        );
+                        
+                        invoke_signed(
+                            &creator_ix,
+                            &[
+                                game.to_account_info(),
+                                ctx.accounts.creator.to_account_info(),
+                                ctx.accounts.system_program.to_account_info(),
+                            ],
+                            &[&[
+                                b"game",
+                                game.creator.as_ref(),
+                                &[game.bump],
+                            ]],
+                        )?;
+                    }
+                    
+                    // Transfer to joiner if they won or it's a draw
+                    if joiner_amount > 0 {
+                        let joiner_ix = system_instruction::transfer(
+                            &game.key(),
+                            &game.joiner.unwrap(),
+                            joiner_amount,
+                        );
+                        
+                        invoke_signed(
+                            &joiner_ix,
+                            &[
+                                game.to_account_info(),
+                                ctx.accounts.joiner.to_account_info(),
+                                ctx.accounts.system_program.to_account_info(),
+                            ],
+                            &[&[
+                                b"game",
+                                game.creator.as_ref(),
+                                &[game.bump],
+                            ]],
+                        )?;
+                    }
+                    
+                    // Transfer fee to platform (only if not a draw)
+                    if fee_amount > 0 && result != GameResult::Draw {
+                        let fee_ix = system_instruction::transfer(
+                            &game.key(),
+                            &fee_recipient,
+                            fee_amount,
+                        );
+                        
+                        invoke_signed(
+                            &fee_ix,
+                            &[
+                                game.to_account_info(),
+                                ctx.accounts.fee_recipient.to_account_info(),
+                                ctx.accounts.system_program.to_account_info(),
+                            ],
+                            &[&[
+                                b"game",
+                                game.creator.as_ref(),
+                                &[game.bump],
+                            ]],
+                        )?;
+                    }
+                },
+                WagerCurrency::RpsToken => {
+                    // Ensure token accounts are provided
+                    let creator_token = ctx.accounts.creator_token_account.as_ref()
+                        .ok_or(RPSTokenError::MissingTokenAccount)?;
+                    let joiner_token = ctx.accounts.joiner_token_account.as_ref()
+                        .ok_or(RPSTokenError::MissingTokenAccount)?;
+                    let fee_token = ctx.accounts.fee_token_account.as_ref()
+                        .ok_or(RPSTokenError::MissingTokenAccount)?;
+                    let game_token = ctx.accounts.game_token_account.as_ref()
+                        .ok_or(RPSTokenError::MissingTokenAccount)?;
+                    let token_program = ctx.accounts.token_program.as_ref()
+                        .ok_or(RPSTokenError::MissingTokenProgram)?;
+                    
+                    // Determine prize distribution
+                    let (creator_amount, joiner_amount) = match result {
+                        GameResult::CreatorWon => (total_prize - fee_amount, 0),
+                        GameResult::JoinerWon => (0, total_prize - fee_amount),
+                        GameResult::Draw => (game.wager_amount, game.wager_amount),
+                        GameResult::Timeout => return Err(RPSError::InvalidGameState.into()),
+                    };
+                    
+                    // Transfer to creator if they won or it's a draw
+                    if creator_amount > 0 {
+                        token::transfer(
+                            CpiContext::new_with_signer(
+                                token_program.to_account_info(),
+                                token::Transfer {
+                                    from: game_token.to_account_info(),
+                                    to: creator_token.to_account_info(),
+                                    authority: game.to_account_info(),
+                                },
+                                &[&[
+                                    b"game",
+                                    game.creator.as_ref(),
+                                    &[game.bump],
+                                ]],
+                            ),
+                            creator_amount,
+                        )?;
+                    }
+                    
+                    // Transfer to joiner if they won or it's a draw
+                    if joiner_amount > 0 {
+                        token::transfer(
+                            CpiContext::new_with_signer(
+                                token_program.to_account_info(),
+                                token::Transfer {
+                                    from: game_token.to_account_info(),
+                                    to: joiner_token.to_account_info(),
+                                    authority: game.to_account_info(),
+                                },
+                                &[&[
+                                    b"game",
+                                    game.creator.as_ref(),
+                                    &[game.bump],
+                                ]],
+                            ),
+                            joiner_amount,
+                        )?;
+                    }
+                    
+                    // Transfer fee to platform (only if not a draw)
+                    if fee_amount > 0 && result != GameResult::Draw {
+                        token::transfer(
+                            CpiContext::new_with_signer(
+                                token_program.to_account_info(),
+                                token::Transfer {
+                                    from: game_token.to_account_info(),
+                                    to: fee_token.to_account_info(),
+                                    authority: game.to_account_info(),
+                                },
+                                &[&[
+                                    b"game",
+                                    game.creator.as_ref(),
+                                    &[game.bump],
+                                ]],
+                            ),
+                            fee_amount,
+                        )?;
+                    }
+                }
+            }
+            
+            // Update user profiles
+            match result {
+                GameResult::CreatorWon => {
+                    // Update creator profile
+                    if let Some(profile) = &mut ctx.accounts.creator_profile {
+                        profile.games_won += 1;
+                        match game.currency {
+                            WagerCurrency::Sol => {
+                                profile.total_sol_won += total_prize - fee_amount - game.wager_amount;
+                            },
+                            WagerCurrency::RpsToken => {
+                                profile.total_rps_won += total_prize - fee_amount - game.wager_amount;
+                            },
+                        }
+                    }
+                    
+                    // Update joiner profile
+                    if let Some(profile) = &mut ctx.accounts.joiner_profile {
+                        profile.games_lost += 1;
+                    }
+                },
+                GameResult::JoinerWon => {
+                    // Update creator profile
+                    if let Some(profile) = &mut ctx.accounts.creator_profile {
+                        profile.games_lost += 1;
+                    }
+                    
+                    // Update joiner profile
+                    if let Some(profile) = &mut ctx.accounts.joiner_profile {
+                        profile.games_won += 1;
+                        match game.currency {
+                            WagerCurrency::Sol => {
+                                profile.total_sol_won += total_prize - fee_amount - game.wager_amount;
+                            },
+                            WagerCurrency::RpsToken => {
+                                profile.total_rps_won += total_prize - fee_amount - game.wager_amount;
+                            },
+                        }
+                    }
+                },
+                GameResult::Draw => {
+                    // Update creator profile
+                    if let Some(profile) = &mut ctx.accounts.creator_profile {
+                        profile.games_drawn += 1;
+                    }
+                    
+                    // Update joiner profile
+                    if let Some(profile) = &mut ctx.accounts.joiner_profile {
+                        profile.games_drawn += 1;
+                    }
+                },
+                GameResult::Timeout => {},
+            }
+            
+            // Update admin statistics
+            if let Some(admin_profile) = &mut ctx.accounts.admin_config {
+                let admin_result = match result {
+                    GameResult::CreatorWon => AdminGameResult::CreatorWon,
+                    GameResult::JoinerWon => AdminGameResult::JoinerWon,
+                    GameResult::Draw => AdminGameResult::Draw,
+                    GameResult::Timeout => AdminGameResult::Timeout,
+                };
+                
+                update_game_stats(
+                    admin_profile,
+                    total_prize,
+                    fee_amount,
+                    game.currency,
+                    admin_result,
+                )?;
+            }
+        } else {
+            game.state = GameState::MovesRevealed;
+        }
+
+        game.last_action_at = clock.unix_timestamp;
+
+        emit!(MoveRevealedEvent {
+            game: game.key(),
+            player: player.key(),
+            move_choice,
+            timestamp: clock.unix_timestamp,
+        });
+
+        Ok(())
+    }
+
+    // Claim timeout if the other player is inactive
+    pub fn claim_timeout(ctx: Context<ClaimTimeout>) -> Result<()> {
+        // Check if program is paused
+        check_not_paused(&ctx.accounts.admin_config)?;
+        
+        let game = &mut ctx.accounts.game;
+        let player = &ctx.accounts.player;
+        let admin_config = &ctx.accounts.admin_config;
+        let clock = Clock::get()?;
+        
+        // Check if player is part of the game
+        require!(
+            player.key() == game.creator || Some(player.key()) == game.joiner,
+            RPSError::NotAPlayer
+        );
+        
+        // Check if enough time has passed since last action
+        let current_time = clock.unix_timestamp;
+        require!(
+            current_time - game.last_action_at > TIMEOUT_DURATION,
+            RPSError::TimeoutNotReached
+        );
+        
+        let (winner, loser) = match game.state {
+            GameState::Created => {
+                // If game was created but no one joined, creator gets refund
+                require!(player.key() == game.creator, RPSError::NotAuthorized);
+                (game.creator, None)
+            },
+            GameState::Joined | GameState::MovesCommitted => {
+                // Determine who's at fault based on missing actions
+                if game.creator_move_hash.is_none() && player.key() != game.creator {
+                    // Creator didn't commit, joiner wins
+                    (game.joiner.unwrap(), Some(game.creator))
+                } else if game.joiner_move_hash.is_none() && player.key() != game.joiner.unwrap() {
+                    // Joiner didn't commit, creator wins
+                    (game.creator, game.joiner)
+                } else if game.state == GameState::MovesCommitted {
+                    if game.creator_move.is_none() && player.key() != game.creator {
+                        // Creator didn't reveal, joiner wins
+                        (game.joiner.unwrap(), Some(game.creator))
+                    } else if game.joiner_move.is_none() && player.key() != game.joiner.unwrap() {
+                        // Joiner didn't reveal, creator wins
+                        (game.creator, game.joiner)
+                    } else {
+                        return Err(RPSError::NoTimeoutCondition.into());
+                    }
+                } else {
+                    return Err(RPSError::NoTimeoutCondition.into());
+                }
+            },
+            _ => return Err(RPSError::InvalidGameState.into()),
+        };
+        
+        // Update game state
+        game.state = GameState::Completed;
+        game.result = Some(GameResult::Timeout);
+        
+        // Calculate total wager and fee
+        let total_wager = match game.state {
+            GameState::Created => game.wager_amount, // Only creator's wager
+            _ => game.wager_amount * 2,              // Both wagers
+        };
+        
+        // Calculate platform fee (based on admin config)
+        let fee_percent = match game.currency {
+            WagerCurrency::Sol => admin_config.sol_fee_percent,
+            WagerCurrency::RpsToken => admin_config.rps_token_fee_percent,
+        };
+        
+        let fee_amount = (total_wager * fee_percent) / 100;
+        let winner_amount = total_wager - fee_amount;
+        
+        // Distribute funds based on currency
+        match game.currency {
+            WagerCurrency::Sol => {
+                // Transfer winner amount
+                let winner_ix = system_instruction::transfer(
+                    &game.key(),
+                    &winner,
+                    winner_amount,
+                );
+                
+                invoke_signed(
+                    &winner_ix,
+                    &[
+                        game.to_account_info(),
+                        winner.to_account_info(),
+                        ctx.accounts.system_program.to_account_info(),
+                    ],
+                    &[&[
+                        b"game",
+                        game.creator.as_ref(),
+                        &[game.bump],
+                    ]],
+                )?;
+                
+                // Transfer fee to platform
+                if fee_amount > 0 {
+                    let fee_ix = system_instruction::transfer(
+                        &game.key(),
+                        &admin_config.sol_fee_recipient,
+                        fee_amount,
+                    );
+                    
+                    invoke_signed(
+                        &fee_ix,
+                        &[
+                            game.to_account_info(),
+                            ctx.accounts.fee_recipient.to_account_info(),
+                            ctx.accounts.system_program.to_account_info(),
+                        ],
+                        &[&[
+                            b"game",
+                            game.creator.as_ref(),
+                            &[game.bump],
+                        ]],
+                    )?;
+                }
+            },
+            WagerCurrency::RpsToken => {
+                // Ensure token accounts are provided
+                let winner_token = ctx.accounts.winner_token_account.as_ref()
+                    .ok_or(RPSTokenError::MissingTokenAccount)?;
+                let fee_token = ctx.accounts.fee_token_account.as_ref()
+                    .ok_or(RPSTokenError::MissingTokenAccount)?;
+                let game_token = ctx.accounts.game_token_account.as_ref()
+                    .ok_or(RPSTokenError::MissingTokenAccount)?;
+                let token_program = ctx.accounts.token_program.as_ref()
+                    .ok_or(RPSTokenError::MissingTokenProgram)?;
+                
+                // Transfer tokens to winner
+                token::transfer(
+                    CpiContext::new_with_signer(
+                        token_program.to_account_info(),
+                        token::Transfer {
+                            from: game_token.to_account_info(),
+                            to: winner_token.to_account_info(),
+                            authority: game.to_account_info(),
+                        },
+                        &[&[
+                            b"game",
+                            game.creator.as_ref(),
+                            &[game.bump],
+                        ]],
+                    ),
+                    winner_amount,
+                )?;
+                
+                // Transfer fee to platform
+                if fee_amount > 0 {
+                    token::transfer(
+                        CpiContext::new_with_signer(
+                            token_program.to_account_info(),
+                            token::Transfer {
+                                from: game_token.to_account_info(),
+                                to: fee_token.to_account_info(),
+                                authority: game.to_account_info(),
+                            },
+                            &[&[
+                                b"game",
+                                game.creator.as_ref(),
+                                &[game.bump],
+                            ]],
+                        ),
+                        fee_amount,
+                    )?;
+                }
+            }
+        }
+        
+        // Update user profiles
+        let is_creator_winner = winner == game.creator;
+        
+        // Update creator profile
+        if let Some(profile) = &mut ctx.accounts.creator_profile {
+            if is_creator_winner {
+                profile.games_won += 1;
+                match game.currency {
+                    WagerCurrency::Sol => {
+                        profile.total_sol_won += winner_amount - game.wager_amount;
+                    },
+                    WagerCurrency::RpsToken => {
+                        profile.total_rps_won += winner_amount - game.wager_amount;
+                    },
+                }
+            } else {
+                profile.games_lost += 1;
+            }
+        }
+        
+        // Update joiner profile
+        if let Some(profile) = &mut ctx.accounts.joiner_profile {
+            if !is_creator_winner {
+                profile.games_won += 1;
+                match game.currency {
+                    WagerCurrency::Sol => {
+                        profile.total_sol_won += winner_amount - game.wager_amount;
+                    },
+                    WagerCurrency::RpsToken => {
+                        profile.total_rps_won += winner_amount - game.wager_amount;
+                    },
+                }
+            } else {
+                profile.games_lost += 1;
+            }
+        }
+        
+        // Update admin statistics
+        if let Some(admin_profile) = &mut ctx.accounts.admin_config {
+            update_game_stats(
+                admin_profile,
+                total_wager,
+                fee_amount,
+                game.currency,
+                AdminGameResult::Timeout,
+            )?;
+        }
+        
+        emit!(TimeoutClaimedEvent {
+            game: game.key(),
+            claimer: player.key(),
+            winner,
+            loser,
+            timestamp: clock.unix_timestamp,
+        });
+        
+        Ok(())
+    }
+
+    // Close the game account and reclaim rent
+    pub fn close_game(ctx: Context<CloseGame>) -> Result<()> {
+        let game = &ctx.accounts.game;
+        
+        // Verify game is in a state that can be closed
+        require!(
+            game.state == GameState::Completed,
+            RPSError::GameNotCompleted
+        );
+        
+        // The remaining lamports (rent) will be transferred to the creator
+        // automatically by Anchor's close constraint
+        
+        emit!(GameClosedEvent {
+            game: game.key(),
+            closer: ctx.accounts.creator.key(),
+            timestamp: Clock::get()?.unix_timestamp,
+        });
+        
+        Ok(())
+    }
+}
+
+// Helper function to determine the winner based on moves
+fn determine_winner(creator_move: GameMove, joiner_move: GameMove) -> GameResult {
+    if creator_move == joiner_move {
+        return GameResult::Draw;
+    }
+    
+    match (creator_move, joiner_move) {
+        (GameMove::Rock, GameMove::Scissors) => GameResult::CreatorWon,
+        (GameMove::Paper, GameMove::Rock) => GameResult::CreatorWon,
+        (GameMove::Scissors, GameMove::Paper) => GameResult::CreatorWon,
+        _ => GameResult::JoinerWon,
+    }
+}
+
+// Account contexts for each instruction
+#[derive(Accounts)]
+#[instruction(wager_amount: u64, player_seed: String, currency: WagerCurrency)]
+pub struct CreateGame<'info> {
+    #[account(mut)]
+    pub player: Signer<'info>,
+    
+    #[account(
+        init,
+        payer = player,
+        space = 8 + size_of::<GameAccount>(),
+        seeds = [b"game", player.key().as_ref()],
+        bump
+    )]
+    pub game: Account<'info, GameAccount>,
+    
+    #[account(
+        seeds = [admin::ADMIN_SEED],
+        bump = admin_config.bump
+    )]
+    pub admin_config: Account<'info, admin::AdminConfig>,
+    
+    /// Player's token account (only required for RPS token games)
+    pub player_token_account: Option<Account<'info, TokenAccount>>,
+    
+    /// Game's token account (only required for RPS token games)
+    pub game_token_account: Option<Account<'info, TokenAccount>>,
+    
+    /// User profile (optional)
+    #[account(
+        mut,
+        seeds = [b"user-profile", player.key().as_ref()],
+        bump,
+        constraint = user_profile.user == player.key()
+    )]
+    pub user_profile: Option<Account<'info, UserProfile>>,
+    
+    pub token_program: Option<Program<'info, Token>>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(player_seed: String)]
+pub struct JoinGame<'info> {
+    #[account(mut)]
+    pub player: Signer<'info>,
+    
+    #[account(mut)]
+    pub game: Account<'info, GameAccount>,
+    
+    #[account(
+        seeds = [admin::ADMIN_SEED],
+        bump = admin_config.bump
+    )]
+    pub admin_config: Account<'info, admin::AdminConfig>,
+    
+    /// Player's token account (only required for RPS token games)
+    pub player_token_account: Option<Account<'info, TokenAccount>>,
+    
+    /// Game's token account (only required for RPS token games)
+    pub game_token_account: Option<Account<'info, TokenAccount>>,
+    
+    /// User profile (optional)
+    #[account(
+        mut,
+        seeds = [b"user-profile", player.key().as_ref()],
+        bump,
+        constraint = user_profile.user == player.key()
+    )]
+    pub user_profile: Option<Account<'info, UserProfile>>,
+    
+    pub token_program: Option<Program<'info, Token>>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct CommitMove<'info> {
+    #[account(mut)]
+    pub player: Signer<'info>,
+    
+    #[account(mut)]
+    pub game: Account<'info, GameAccount>,
+    
+    #[account(
+        seeds = [admin::ADMIN_SEED],
+        bump = admin_config.bump
+    )]
+    pub admin_config: Account<'info, admin::AdminConfig>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct RevealMove<'info> {
+    #[account(mut)]
+    pub player: Signer<'info>,
+    
+    #[account(mut)]
+    pub game: Account<'info, GameAccount>,
+    
+    #[account(
+        seeds = [admin::ADMIN_SEED],
+        bump = admin_config.bump
+    )]
+    pub admin_config: Option<Account<'info, admin::AdminConfig>>,
+    
+    /// CHECK: This is the creator account, needed for prize distribution
+    #[account(
+        mut,
+        constraint = creator.key() == game.creator
+    )]
+    pub creator: AccountInfo<'info>,
+    
+    /// CHECK: This is the joiner account, needed for prize distribution
+    #[account(
+        mut,
+        constraint = joiner.key() == game.joiner.unwrap_or_default()
+    )]
+    pub joiner: AccountInfo<'info>,
+    
+    /// CHECK: This is the fee recipient account
+    #[account(mut)]
+    pub fee_recipient: AccountInfo<'info>,
+    
+    /// Creator's token account (only required for RPS token games)
+    pub creator_token_account: Option<Account<'info, TokenAccount>>,
+    
+    /// Joiner's token account (only required for RPS token games)
+    pub joiner_token_account: Option<Account<'info, TokenAccount>>,
+    
+    /// Fee recipient's token account (only required for RPS token games)
+    pub fee_token_account: Option<Account<'info, TokenAccount>>,
+    
+    /// Game's token account (only required for RPS token games)
+    pub game_token_account: Option<Account<'info, TokenAccount>>,
+    
+    /// Creator's user profile (optional)
+    #[account(
+        mut,
+        seeds = [b"user-profile", creator.key().as_ref()],
+        bump,
+        constraint = creator_profile.user == creator.key()
+    )]
+    pub creator_profile: Option<Account<'info, UserProfile>>,
+    
+    /// Joiner's user profile (optional)
+    #[account(
+        mut,
+        seeds = [b"user-profile", joiner.key().as_ref()],
+        bump,
+        constraint = joiner_profile.user == joiner.key()
+    )]
+    pub joiner_profile: Option<Account<'info, UserProfile>>,
+    
+    pub token_program: Option<Program<'info, Token>>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ClaimTimeout<'info> {
+    #[account(mut)]
+    pub player: Signer<'info>,
+    
+    #[account(mut)]
+    pub game: Account<'info, GameAccount>,
+    
+    #[account(
+        seeds = [admin::ADMIN_SEED],
+        bump = admin_config.bump
+    )]
+    pub admin_config: Account<'info, admin::AdminConfig>,
+    
+    /// CHECK: This is the fee recipient account
+    #[account(mut)]
+    pub fee_recipient: AccountInfo<'info>,
+    
+    /// Winner's token account (only required for RPS token games)
+    pub winner_token_account: Option<Account<'info, TokenAccount>>,
+    
+    /// Fee recipient's token account (only required for RPS token games)
+    pub fee_token_account: Option<Account<'info, TokenAccount>>,
+    
+    /// Game's token account (only required for RPS token games)
+    pub game_token_account: Option<Account<'info, TokenAccount>>,
+    
+    /// Creator's user profile (optional)
+    #[account(
+        mut,
+        seeds = [b"user-profile", game.creator.as_ref()],
+        bump,
+        constraint = creator_profile.user == game.creator
+    )]
+    pub creator_profile: Option<Account<'info, UserProfile>>,
+    
+    /// Joiner's user profile (optional)
+    #[account(
+        mut,
+        seeds = [b"user-profile", game.joiner.unwrap_or_default().as_ref()],
+        bump,
+        constraint = joiner_profile.user == game.joiner.unwrap_or_default()
+    )]
+    pub joiner_profile: Option<Account<'info, UserProfile>>,
+    
+    pub token_program: Option<Program<'info, Token>>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct CloseGame<'info> {
+    #[account(
+        mut,
+        constraint = creator.key() == game.creator
+    )]
+    pub creator: Signer<'info>,
+    
+    #[account(
+        mut,
+        close = creator,
+        constraint = game.state == GameState::Completed
+    )]
+    pub game: Account<'info, GameAccount>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct InitializeUserProfile<'info> {
+    #[account(mut)]
+    pub user: Signer<'info>,
+    
+    #[account(
+        init,
+        payer = user,
+        space = 8 + size_of::<UserProfile>(),
+        seeds = [b"user-profile", user.key().as_ref()],
+        bump
+    )]
+    pub user_profile: Account<'info, UserProfile>,
+    
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+}
+
+// Re-export admin account contexts
+pub use admin::{
+    InitializeAdmin,
+    UpdateAdmin,
+    TransferAuthority,
+    WithdrawFees,
+    WithdrawTokenFees,
+    EmergencyRecover,
+};
+
+// Game account structure to store all game data
+#[account]
+pub struct GameAccount {
+    // Game participants
+    pub creator: Pubkey,
+    pub joiner: Option<Pubkey>,
+    
+    // Game state
+    pub state: GameState,
+    pub wager_amount: u64,
+    pub result: Option<GameResult>,
+    pub currency: WagerCurrency,
+    pub fee_percent: u64,
+    
+    // Commit-reveal scheme data
+    pub creator_seed: String,
+    pub joiner_seed: Option<String>,
+    pub creator_move_hash: Option<[u8; 32]>,
+    pub joiner_move_hash: Option<[u8; 32]>,
+    pub creator_move: Option<GameMove>,
+    pub joiner_move: Option<GameMove>,
+    pub creator_salt: Option<String>,
+    pub joiner_salt: Option<String>,
+    
+    // Timestamps for timeout handling
+    pub created_at: i64,
+    pub last_action_at: i64,
+    
+    // PDA bump
+    pub bump: u8,
+}
+
+// User profile account
+#[account]
+pub struct UserProfile {
+    // User public key
+    pub user: Pubkey,
+    
+    // Game statistics
+    pub games_played: u64,
+    pub games_won: u64,
+    pub games_lost: u64,
+    pub games_drawn: u64,
+    
+    // Financial statistics
+    pub total_sol_wagered: u64,
+    pub total_rps_wagered: u64,
+    pub total_sol_won: u64,
+    pub total_rps_won: u64,
+    
+    // Timestamps
+    pub created_at: i64,
+    pub last_played_at: i64,
+    
+    // PDA bump
+    pub bump: u8,
+}
+
+// Game state enum
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum GameState {
+    Created,
+    Joined,
+    MovesCommitted,
+    MovesRevealed,
+    Completed,
+}
+
+// Game move enum
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum GameMove {
+    Rock,
+    Paper,
+    Scissors,
+}
+
+impl GameMove {
+    fn to_string(&self) -> String {
+        match self {
+            GameMove::Rock => "rock".to_string(),
+            GameMove::Paper => "paper".to_string(),
+            GameMove::Scissors => "scissors".to_string(),
+        }
+    }
+}
+
+// Game result enum
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum GameResult {
+    CreatorWon,
+    JoinerWon,
+    Draw,
+    Timeout,
+}
+
+// Custom error enum
+#[error_code]
+pub enum RPSError {
+    #[msg("Invalid game state for this operation")]
+    InvalidGameState,
+    
+    #[msg("Game has already been joined")]
+    GameAlreadyJoined,
+    
+    #[msg("Cannot join your own game")]
+    CannotJoinOwnGame,
+    
+    #[msg("You are not a player in this game")]
+    NotAPlayer,
+    
+    #[msg("Move has already been committed")]
+    MoveAlreadyCommitted,
+    
+    #[msg("Move has already been revealed")]
+    MoveAlreadyRevealed,
+    
+    #[msg("Invalid move reveal - hash doesn't match")]
+    InvalidMoveReveal,
+    
+    #[msg("Timeout duration has not been reached yet")]
+    TimeoutNotReached,
+    
+    #[msg("No timeout condition exists")]
+    NoTimeoutCondition,
+    
+    #[msg("Not authorized to perform this action")]
+    NotAuthorized,
+    
+    #[msg("Game has not been completed yet")]
+    GameNotCompleted,
+}
+
+// Events
+#[event]
+pub struct GameCreatedEvent {
+    pub game: Pubkey,
+    pub creator: Pubkey,
+    pub wager_amount: u64,
+    pub currency: WagerCurrency,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct GameJoinedEvent {
+    pub game: Pubkey,
+    pub joiner: Pubkey,
+    pub wager_amount: u64,
+    pub currency: WagerCurrency,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct MoveCommittedEvent {
+    pub game: Pubkey,
+    pub player: Pubkey,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct MoveRevealedEvent {
+    pub game: Pubkey,
+    pub player: Pubkey,
+    pub move_choice: GameMove,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct TimeoutClaimedEvent {
+    pub game: Pubkey,
+    pub claimer: Pubkey,
+    pub winner: Pubkey,
+    pub loser: Option<Pubkey>,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct GameClosedEvent {
+    pub game: Pubkey,
+    pub closer: Pubkey,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct UserProfileCreatedEvent {
+    pub user: Pubkey,
+    pub timestamp: i64,
+}

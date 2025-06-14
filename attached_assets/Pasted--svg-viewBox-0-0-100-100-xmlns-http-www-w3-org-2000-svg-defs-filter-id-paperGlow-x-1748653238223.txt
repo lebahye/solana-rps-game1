@@ -1,0 +1,98 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="paperGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="paperGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00C2FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00A8E0;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="paperFoldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00A8E0;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#008FC0;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <g id="paper-group" style="transform-origin: center center;">
+    <!-- Main paper shape -->
+    <path id="paper-body" 
+          d="M 20 15 
+             C 18 18, 18 82, 20 85 
+             L 80 85 
+             C 82 82, 82 18, 80 15 
+             L 20 15 Z" 
+          fill="url(#paperGradient)" stroke="#50DFFF" stroke-width="2" stroke-linejoin="round"/>
+
+    <!-- Fold line 1 (subtle) -->
+    <path id="fold1" d="M 20 40 Q 50 38 80 42" stroke="url(#paperFoldGradient)" stroke-width="1.5" fill="none" opacity="0.6"/>
+    
+    <!-- Fold line 2 (subtle) -->
+    <path id="fold2" d="M 20 60 Q 50 62 80 58" stroke="url(#paperFoldGradient)" stroke-width="1.5" fill="none" opacity="0.6"/>
+
+    <!-- Subtle corner curl/highlight -->
+    <path d="M 70 15 Q 78 15, 80 22 L 80 15 Z" fill="#A0EFFF" opacity="0.7"/>
+    
+    <!-- Animation: Gentle waving/breathing -->
+    <animateTransform 
+        xlink:href="#paper-body"
+        attributeName="transform"
+        attributeType="XML"
+        type="skewY"
+        values="0; 2; -2; 0"
+        dur="4s"
+        repeatCount="indefinite"
+        calcMode="spline"
+        keyTimes="0; 0.25; 0.75; 1"
+        keySplines="0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1"
+    />
+     <animateTransform 
+        xlink:href="#paper-body"
+        attributeName="transform"
+        attributeType="XML"
+        type="scale"
+        additive="sum" 
+        values="0 0; 0.01 0.01; -0.01 -0.01; 0 0"
+        dur="4s"
+        repeatCount="indefinite"
+        calcMode="spline"
+        keyTimes="0; 0.25; 0.75; 1"
+        keySplines="0.42 0 0.58 1; 0.42 0 0.58 1; 0.42 0 0.58 1"
+    />
+
+    <animate 
+        xlink:href="#fold1"
+        attributeName="d"
+        values="M 20 40 Q 50 38 80 42; M 20 40 Q 50 40 80 40; M 20 40 Q 50 38 80 42"
+        dur="4s"
+        repeatCount="indefinite"
+        calcMode="spline"
+        keyTimes="0; 0.5; 1"
+        keySplines="0.42 0 0.58 1; 0.42 0 0.58 1"
+    />
+    <animate 
+        xlink:href="#fold2"
+        attributeName="d"
+        values="M 20 60 Q 50 62 80 58; M 20 60 Q 50 60 80 60; M 20 60 Q 50 62 80 58"
+        dur="4s"
+        repeatCount="indefinite"
+        calcMode="spline"
+        keyTimes="0; 0.5; 1"
+        keySplines="0.42 0 0.58 1; 0.42 0 0.58 1"
+    />
+    
+    <animate 
+        xlink:href="#paper-group"
+        attributeName="filter"
+        values="none; url(#paperGlow); none"
+        dur="4s"
+        repeatCount="indefinite"
+        calcMode="spline"
+        keyTimes="0; 0.5; 1"
+        keySplines="0.42 0 0.58 1; 0.42 0 0.58 1"
+    />
+  </g>
+</svg>

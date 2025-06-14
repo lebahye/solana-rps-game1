@@ -1,0 +1,179 @@
+import { Howl, Howler } from 'howler';
+
+const LOCAL_STORAGE_KEY = 'rps_audio_prefs';
+
+interface AudioPreferences {
+  masterEnabled: boolean;
+  musicEnabled: boolean;
+  masterVolume: number;
+}
+
+class AudioService {
+  private sounds: Record<string, Howl> = {};
+  private musicTrack: Howl | null = null;
+
+  private masterEnabled: boolean = true;
+  private musicEnabled: boolean = true;
+  private masterVolume: number = 0.7; // Default volume (0.0 to 1.0)
+
+  constructor() {
+    this.loadPreferences();
+    this.initializeSounds();
+    Howler.volume(this.masterVolume); // Set initial global volume
+  }
+
+  private initializeSounds(): void {
+    const soundFiles: Record<string, { paths: string[], volume?: number, loop?: boolean }> = {
+      click: { paths: ['/sounds/click.mp3', '/sounds/click.ogg'], volume: 1.0 },
+      moveSelect: { paths: ['/sounds/move-select.mp3', '/sounds/move-select.ogg'], volume: 1.0 },
+      commit: { paths: ['/sounds/commit.mp3', '/sounds/commit.ogg'], volume: 1.0 },
+      reveal: { paths: ['/sounds/reveal.mp3', '/sounds/reveal.ogg'], volume: 1.0 },
+      win: { paths: ['/sounds/win.mp3', '/sounds/win.ogg'], volume: 1.0 },
+      lose: { paths: ['/sounds/lose.mp3', '/sounds/lose.ogg'], volume: 1.0 },
+      draw: { paths: ['/sounds/draw.mp3', '/sounds/draw.ogg'], volume: 1.0 },
+      countdown: { paths: ['/sounds/countdown.mp3', '/sounds/countdown.ogg'], volume: 0.8 },
+      backgroundMusic: { paths: ['/sounds/background-music.mp3', '/sounds/background-music.ogg'], volume: 0.5, loop: true },
+    };
+
+    for (const key in soundFiles) {
+      if (Object.prototype.hasOwnProperty.call(soundFiles, key)) {
+        const config = soundFiles[key];
+        try {
+          const howlConfig: HowlOptions = {
+            src: config.paths,
+            volume: config.volume !== undefined ? config.volume : 1.0, // Relative to master volume
+            loop: config.loop || false,
+            onloaderror: (id, err) => this.handleLoadError(key, id, err),
+            onplayerror: (id, err) => console.warn(`Error playing sound ${key} (ID: ${id}):`, err),
+          };
+
+          if (key === 'backgroundMusic') {
+            this.musicTrack = new Howl(howlConfig);
+          } else {
+            this.sounds[key] = new Howl(howlConfig);
+          }
+        } catch (error) {
+          console.error(`Error initializing Howl for sound ${key}:`, error);
+        }
+      }
+    }
+  }
+
+  private handleLoadError(soundName: string, soundId?: number | string, error?: any): void {
+    console.warn(`Sound "${soundName}" (ID: ${soundId || 'N/A'}) failed to load:`, error);
+    // Optionally, disable this specific sound or notify the user
+  }
+
+  private loadPreferences(): void {
+    try {
+      const storedPrefs = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (storedPrefs) {
+        const prefs = JSON.parse(storedPrefs) as Partial<AudioPreferences>;
+        this.masterEnabled = prefs.masterEnabled !== undefined ? prefs.masterEnabled : true;
+        this.musicEnabled = prefs.musicEnabled !== undefined ? prefs.musicEnabled : true;
+        this.masterVolume = prefs.masterVolume !== undefined ? prefs.masterVolume : 0.7;
+        
+        // Ensure volume is within valid range
+        if (this.masterVolume < 0 || this.masterVolume > 1) {
+            this.masterVolume = 0.7;
+        }
+
+      }
+    } catch (error) {
+      console.warn('Failed to load audio preferences from localStorage:', error);
+      // Defaults will be used
+    }
+  }
+
+  private savePreferences(): void {
+    try {
+      const prefs: AudioPreferences = {
+        masterEnabled: this.masterEnabled,
+        musicEnabled: this.musicEnabled,
+        masterVolume: this.masterVolume,
+      };
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(prefs));
+    } catch (error) {
+      console.warn('Failed to save audio preferences to localStorage:', error);
+    }
+  }
+
+  public playSound(soundName: keyof Omit<AudioService['sounds'], 'backgroundMusic'>): void {
+    if (!this.masterEnabled || !this.sounds[soundName]) {
+      return;
+    }
+    try {
+      this.sounds[soundName].play();
+    } catch (error) {
+      console.error(`Error playing sound "${soundName}":`, error);
+    }
+  }
+
+  public playMusic(): void {
+    if (!this.masterEnabled || !this.musicEnabled || !this.musicTrack || this.musicTrack.playing()) {
+      return;
+    }
+    try {
+      this.musicTrack.play();
+    } catch (error) {
+      console.error('Error playing background music:', error);
+    }
+  }
+
+  public stopMusic(): void {
+    if (!this.musicTrack || !this.musicTrack.playing()) {
+      return;
+    }
+    try {
+      this.musicTrack.stop();
+    } catch (error) {
+      console.error('Error stopping background music:', error);
+    }
+  }
+
+  public setMasterVolume(volume: number): void {
+    const newVolume = Math.max(0, Math.min(1, volume)); // Clamp between 0 and 1
+    this.masterVolume = newVolume;
+    Howler.volume(this.masterVolume);
+    this.savePreferences();
+  }
+
+  public getMasterVolume(): number {
+    return this.masterVolume;
+  }
+
+  public toggleMasterEnabled(enable?: boolean): void {
+    this.masterEnabled = enable !== undefined ? enable : !this.masterEnabled;
+    if (!this.masterEnabled) {
+      this.stopMusic(); // Stop music if master audio is disabled
+      // Optionally stop all sound effects: Howler.stop();
+    } else {
+      // If music was enabled before master disable, restart it
+      if (this.musicEnabled && this.musicTrack && !this.musicTrack.playing()) {
+         this.playMusic();
+      }
+    }
+    this.savePreferences();
+  }
+
+  public isMasterEnabled(): boolean {
+    return this.masterEnabled;
+  }
+
+  public toggleMusicEnabled(enable?: boolean): void {
+    this.musicEnabled = enable !== undefined ? enable : !this.musicEnabled;
+    if (this.musicEnabled && this.masterEnabled) {
+      this.playMusic();
+    } else {
+      this.stopMusic();
+    }
+    this.savePreferences();
+  }
+
+  public isMusicEnabled(): boolean {
+    return this.musicEnabled;
+  }
+}
+
+// Singleton instance of the AudioService
+export const audioService = new AudioService();

@@ -1,0 +1,111 @@
+{
+  "testDate": "2025-04-06T16:10:29.712Z",
+  "results": [
+    {
+      "name": "Complete Game Cycle",
+      "description": "Test a complete game cycle from creation to payout",
+      "success": true,
+      "steps": [
+        {
+          "step": 1,
+          "success": true,
+          "message": "Game created with ID: 0b48e15c2724aebd"
+        },
+        {
+          "step": 2,
+          "success": true,
+          "message": "Player 1 joined the game"
+        },
+        {
+          "step": 3,
+          "success": true,
+          "message": "Player 2 joined the game"
+        },
+        {
+          "step": 4,
+          "success": true,
+          "message": "Commit phase started"
+        },
+        {
+          "step": 5,
+          "success": true,
+          "message": "All players committed their choices"
+        },
+        {
+          "step": 6,
+          "success": true,
+          "message": "All players revealed their choices"
+        },
+        {
+          "step": 7,
+          "success": true,
+          "message": "Game results verified correctly"
+        },
+        {
+          "step": 8,
+          "success": true,
+          "message": "Fee collection verified"
+        }
+      ]
+    },
+    {
+      "name": "Double Join Prevention",
+      "description": "Test that a player cannot join the same game twice",
+      "success": true,
+      "steps": [
+        {
+          "step": 1,
+          "success": true,
+          "message": "Game created with ID: 7caa7edfbdc52604"
+        },
+        {
+          "step": 2,
+          "success": true,
+          "message": "Player 1 joined the game"
+        },
+        {
+          "step": 3,
+          "success": true,
+          "message": "Double join correctly prevented"
+        }
+      ]
+    },
+    {
+      "name": "Commitment Verification",
+      "description": "Test that revealed choices must match commitments",
+      "success": true,
+      "steps": [
+        {
+          "step": 1,
+          "success": true,
+          "message": "Game created with ID: 3efea8628c4478f0"
+        },
+        {
+          "step": 2,
+          "success": true,
+          "message": "Player 1 joined the game"
+        },
+        {
+          "step": 3,
+          "success": true,
+          "message": "Commit phase started"
+        },
+        {
+          "step": 4,
+          "success": true,
+          "message": "Host committed Rock"
+        },
+        {
+          "step": 5,
+          "success": true,
+          "message": "Player 1 committed Paper"
+        },
+        {
+          "step": 6,
+          "success": true,
+          "message": "Commitment verification correctly prevented cheat attempt"
+        }
+      ]
+    }
+  ]
+}

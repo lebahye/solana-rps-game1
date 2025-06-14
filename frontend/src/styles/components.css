@@ -1,0 +1,45 @@
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem;
+}
+
+.status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.status-indicator.online {
+  background-color: #4CAF50;
+}
+
+.status-indicator.offline {
+  background-color: #f44336;
+}
+
+.auto-play-container {
+  padding: 1rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.connect-prompt {
+  text-align: center;
+  padding: 2rem;
+}
+
+.auto-play-controls {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.error-message {
+  color: #f44336;
+  margin-top: 1rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  background: rgba(244, 67, 54, 0.1);
+}

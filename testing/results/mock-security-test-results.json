@@ -1,0 +1,183 @@
+{
+  "testDate": "2025-04-06T16:10:28.505Z",
+  "testsRun": 8,
+  "passedTests": 6,
+  "vulnerabilitiesFound": 2,
+  "tests": [
+    {
+      "name": "Commitment Hash Strength",
+      "description": "Tests if the commitment hash function is strong enough",
+      "success": false,
+      "details": {
+        "collisionRate": 0,
+        "hashSamples": {
+          "rock": [
+            "8817bfe6c3b0611a3d43e94e1032e8c67f02706094bb5e4deb88916e6388c9fa0df97db678772063a62e3dcbd1a5df1f5a64c39d9d8a5edd7bab4258e3d930ed",
+            "d214d90c1520317413d53dd7df936c41d8231b27f5e9c4c9a2c6432638077d6e3d11af46d8eb0f2e8cef91df194f8802ccc10ea89a58f35269e8d4ec32503073",
+            "60450c56bbadb5f5a5c7334ba48b88e8e0f7da34e513f2928157186beeed51fdc8fcc02bdbc1430d35d09435b53b031210f01927331067c91bec9ef6eebbc80f"
+          ],
+          "paper": [
+            "9fae820d1ef806a0555224486d6fdf35721ff04464c5d95ab9dfed5861e4402697fad3affca5e32942c306daebfca839960769dd4eced4f0575578836d7b441f",
+            "ce560518e26a5670e06a195403a379a2e8b7473e966f38b150a3092e84489d2d90b55ab3a311012806a6ac8adc7b16561c4346887ced0213750a6749333fcac5",
+            "c63e2dd8ea22b47d592485e9f7d113ebc69f674bb46fa0ecb0ea4f363bb952d1d4216bc0be3b13f6d95b37741f8a6a6449594ed33e0e12209a78d024e946f588"
+          ],
+          "scissors": [
+            "789c0f5f72170841aff2871358916c6df80358a01bc5777e244254ad0f198fd8a92a9679ede479e41dd1945393bce074eba56a64a83bd21904568b67a550044a",
+            "e7868691be0cc8bd4b92ad45de412edaa2e7e329bbc9626a1a6083102060e0a2b29d963ecccaff7941b6dc92f6659e5f4ca20f3a164050f2089b8a6648853025",
+            "54e3e4bcfb8c486f74767811097987095798bc387805b506211d06cdb19df2f0f9f373b4d8f95bef5b933c55a41f9168e5d74e5192b111182a3d3342e0462dc5"
+          ]
+        },
+        "averages": {
+          "rock": 4578204026267708,
+          "paper": 4834264108287023,
+          "scissors": 4501919694499570.5
+        },
+        "maxDifference": 332344413787452.5
+      }
+    },
+    {
+      "name": "Salt Randomness",
+      "description": "Tests that generated salts have sufficient entropy",
+      "success": true,
+      "details": {
+        "uniqueRatio": 1,
+        "entropyScore": 3.9997783712958674,
+        "freqVariance": 0.04333682037251925,
+        "sampleSalts": [
+          "1ec0be0b79ae103861e00028455c0d052e3c629e6ab040ea4e7cfa61fe984ceb",
+          "cdbc7af2fadf38f216f4b3da011cbde4282d5f010c45354001b0909122210dec",
+          "696e3106fe8ead22e6807652f8b201d9432da921d715dc13ba42f3fe1cbce735",
+          "c49b6fb914193b0cd0290b6da6e8547751acc09d34c53bab063824f403ff078a",
+          "57c3e750a68f2f14e444e9fe332ac9c8b6ce36b033209ca97fff676cd748fd9a"
+        ]
+      }
+    },
+    {
+      "name": "Frontrunning Protection",
+      "description": "Tests protection against frontrunning attacks",
+      "success": true,
+      "details": {
+        "commitmentScheme": "commit-reveal with salted hash",
+        "player1Choice": 1,
+        "player1Salt": "1c940149...",
+        "commitment": "0bf4dc5980ca381c...",
+        "attackerSuccess": false
+      }
+    },
+    {
+      "name": "Double Spending",
+      "description": "Tests protection against double spending attacks",
+      "success": true,
+      "details": {
+        "doubleJoinPrevented": true,
+        "newPlayerJoinSucceeded": true,
+        "finalPlayerCount": 3
+      }
+    },
+    {
+      "name": "Timeout Manipulation",
+      "description": "Tests protection against timeout manipulation",
+      "success": true,
+      "details": {
+        "normalGame": {
+          "timeoutSeconds": 300,
+          "gameAge": "600 seconds",
+          "timeoutResolvable": true
+        },
+        "attackerGame": {
+          "timeoutSeconds": 1,
+          "tooShort": true,
+          "minimumRequired": 30
+        }
+      }
+    },
+    {
+      "name": "Transaction Replay",
+      "description": "Tests protection against transaction replay attacks",
+      "success": true,
+      "details": {
+        "originalTransactionsProcessed": true,
+        "replayDetected": true,
+        "expiredTransactionRejected": true,
+        "nonceTransactionAccepted": true,
+        "processedSignatures": [
+          "sig1234",
+          "sig5678",
+          "sig3456"
+        ]
+      }
+    },
+    {
+      "name": "Commitment Revelation Analysis",
+      "description": "Tests if player choice can be inferred from commitment revelation",
+      "success": true,
+      "details": {
+        "sampleSize": 100,
+        "biasedPlayerStats": {
+          "choiceDistribution": {
+            "rock": 67,
+            "paper": 12,
+            "scissors": 21
+          },
+          "means": {
+            "rock": 131.22388059701493,
+            "paper": 89.5,
+            "scissors": 152.66666666666666
+          },
+          "standardDeviations": {
+            "rock": 69.73734726023508,
+            "paper": 57.94433065059475,
+            "scissors": 64.50684718177857
+          },
+          "separation": 0.9860110009621388
+        },
+        "randomPlayerStats": {
+          "choiceDistribution": {
+            "rock": 36,
+            "paper": 35,
+            "scissors": 29
+          },
+          "means": {
+            "rock": 122.11111111111111,
+            "paper": 114.91428571428571,
+            "scissors": 143.75862068965517
+          },
+          "standardDeviations": {
+            "rock": 72.15411196193791,
+            "paper": 73.73137708185405,
+            "scissors": 67.2031329905373
+          },
+          "separation": 0.4060892791928029
+        },
+        "interpretation": "Commitment patterns do not leak information about player choices"
+      }
+    },
+    {
+      "name": "Cryptographic Timing Attack",
+      "description": "Tests resistance to timing attacks on cryptographic operations",
+      "success": false,
+      "details": {
+        "constantTimeImplementation": {
+          "validMatchMean": 7083.2,
+          "invalidMatchMean": 6178.4,
+          "standardDeviations": {
+            "validMatches": 6977.311260381209,
+            "invalidMatches": 1656.646911655888
+          },
+          "timingDifferenceRatio": 0.20959100842771897,
+          "interpretation": "Timing differences not statistically significant"
+        },
+        "vulnerableImplementation": {
+          "validMatchMean": 6777.26,
+          "invalidMatchMean": 4638.12,
+          "standardDeviations": {
+            "validMatches": 3919.7509780210485,
+            "invalidMatches": 2029.4500587622504
+          },
+          "timingDifferenceRatio": 0.7191352206032096,
+          "interpretation": "Unexpectedly timing-safe"
+        }
+      }
+    }
+  ]
+}

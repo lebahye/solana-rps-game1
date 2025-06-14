@@ -1,0 +1,52 @@
+run = "bash -c 'cd solana-rps-program && anchor build && (solana-test-validator -r & sleep 5 && anchor deploy) && cd ../solana-rps-client && npm install && npm run build && npx serve -s build -l 3000'"
+language = "nix"
+entrypoint = "README.md"
+hidden = [".config", "target"]
+
+[nix]
+channel = "stable-22_11"
+
+[env]
+ANCHOR_WALLET = "$HOME/.config/solana/id.json"
+SOLANA_CLUSTER = "localnet"
+
+[packager]
+language = "nodejs"
+  [packager.features]
+  packageSearch = true
+  guessImports = true
+
+[languages.javascript]
+pattern = "**/{*.js,*.jsx,*.ts,*.tsx}"
+  [languages.javascript.languageServer]
+  start = ["typescript-language-server", "--stdio"]
+
+[languages.rust]
+pattern = "**/{*.rs,Cargo.toml}"
+  [languages.rust.languageServer]
+  start = ["rust-analyzer"]
+
+[languages.css]
+pattern = "**/{*.css,*.scss}"
+
+[gitHubImport]
+requiredFiles = [".replit", "replit.nix"]
+
+[deployment]
+run = ["sh", "-c", "cd solana-rps-client && npm start"]
+deploymentTarget = "cloudrun"
+ignorePorts = false
+
+[[ports]]
+localPort = 3000
+externalPort = 80
+name = "Web App"
+protocol = "http"
+
+[[ports]]
+localPort = 8899
+externalPort = 8899
+name = "Solana Validator"
+protocol = "http"
+
+

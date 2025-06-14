@@ -1,0 +1,194 @@
+import React, { FC, useState, useEffect, useCallback } from 'react';
+import { useConnection, useAnchorWallet } from '@solana/wallet-adapter-react';
+import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { getAssociatedTokenAddress, getAccount } from '@solana/spl-token';
+import { BN } from '@project-serum/anchor';
+
+// Mirror the WagerCurrency enum from the smart contract
+export enum WagerCurrency {
+  Sol = 0,
+  RpsToken = 1,
+}
+
+// Placeholder for RPS Token Mint - replace with your actual deployed mint address
+// This should match the one in your smart contract (e.g., token_integration.rs)
+const RPS_TOKEN_MINT_ADDRESS = new PublicKey("RPSTokenMint111111111111111111111111111111");
+// Placeholder for RPS Token Decimals - adjust if your token has different decimals
+const RPS_TOKEN_DECIMALS = 6;
+
+
+interface TokenSelectorProps {
+  selectedCurrency: WagerCurrency;
+  onCurrencyChange: (currency: WagerCurrency) => void;
+  disabled?: boolean;
+}
+
+const TokenSelector: FC<TokenSelectorProps> = ({
+  selectedCurrency,
+  onCurrencyChange,
+  disabled = false,
+}) => {
+  const { connection } = useConnection();
+  const anchorWallet = useAnchorWallet();
+
+  const [solBalance, setSolBalance] = useState<number | null>(null);
+  const [rpsBalance, setRpsBalance] = useState<number | null>(null);
+  const [loadingBalances, setLoadingBalances] = useState<boolean>(false);
+
+  const fetchBalances = useCallback(async () => {
+    if (!anchorWallet || !connection) {
+      setSolBalance(null);
+      setRpsBalance(null);
+      return;
+    }
+
+    setLoadingBalances(true);
+    try {
+      // Fetch SOL balance
+      const sol = await connection.getBalance(anchorWallet.publicKey);
+      setSolBalance(sol / LAMPORTS_PER_SOL);
+
+      // Fetch RPS Token balance
+      try {
+        const rpsTokenAccountAddress = await getAssociatedTokenAddress(
+          RPS_TOKEN_MINT_ADDRESS,
+          anchorWallet.publicKey
+        );
+        const rpsTokenAccountInfo = await getAccount(connection, rpsTokenAccountAddress);
+        setRpsBalance(Number(rpsTokenAccountInfo.amount) / (10 ** RPS_TOKEN_DECIMALS));
+      } catch (error) {
+        // User might not have an RPS token account
+        console.warn("RPS token account not found or error fetching balance:", error);
+        setRpsBalance(0); // Assume 0 if account doesn't exist or error
+      }
+    } catch (error) {
+      console.error("Error fetching balances:", error);
+      setSolBalance(null);
+      setRpsBalance(null);
+    } finally {
+      setLoadingBalances(false);
+    }
+  }, [anchorWallet, connection]);
+
+  useEffect(() => {
+    if (anchorWallet?.publicKey) {
+      fetchBalances();
+    } else {
+      // Reset balances if wallet disconnects
+      setSolBalance(null);
+      setRpsBalance(null);
+    }
+  }, [anchorWallet, fetchBalances]);
+
+  const handleSelectionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const currency = parseInt(event.target.value) as WagerCurrency;
+    onCurrencyChange(currency);
+  };
+
+  return (
+    <div className="token-selector">
+      <h4>Select Wager Currency</h4>
+      <div className="currency-options">
+        <label className={`currency-option ${selectedCurrency === WagerCurrency.Sol ? 'selected' : ''}`}>
+          <input
+            type="radio"
+            name="wagerCurrency"
+            value={WagerCurrency.Sol}
+            checked={selectedCurrency === WagerCurrency.Sol}
+            onChange={handleSelectionChange}
+            disabled={disabled || loadingBalances}
+          />
+          <div className="currency-info">
+            <span className="currency-name">SOL</span>
+            <span className="currency-balance">
+              {loadingBalances && selectedCurrency === WagerCurrency.Sol ? 'Loading...' : 
+               solBalance !== null ? `${solBalance.toFixed(4)} SOL` : 'N/A'}
+            </span>
+          </div>
+        </label>
+
+        <label className={`currency-option ${selectedCurrency === WagerCurrency.RpsToken ? 'selected' : ''}`}>
+          <input
+            type="radio"
+            name="wagerCurrency"
+            value={WagerCurrency.RpsToken}
+            checked={selectedCurrency === WagerCurrency.RpsToken}
+            onChange={handleSelectionChange}
+            disabled={disabled || loadingBalances}
+          />
+          <div className="currency-info">
+            <span className="currency-name">RPS Token</span>
+            <span className="currency-balance">
+            {loadingBalances && selectedCurrency === WagerCurrency.RpsToken ? 'Loading...' : 
+             rpsBalance !== null ? `${rpsBalance.toFixed(RPS_TOKEN_DECIMALS)} RPS` : 'N/A'}
+            </span>
+          </div>
+        </label>
+      </div>
+
+      <style jsx>{`
+        .token-selector {
+          margin-bottom: 20px;
+          padding: 15px;
+          background-color: rgba(255, 255, 255, 0.05);
+          border-radius: var(--border-radius, 8px);
+        }
+        .token-selector h4 {
+          color: var(--accent-color, #00C2FF);
+          margin-top: 0;
+          margin-bottom: 15px;
+          font-size: 1.1em;
+        }
+        .currency-options {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .currency-option {
+          display: flex;
+          align-items: center;
+          padding: 12px;
+          background-color: rgba(255, 255, 255, 0.08);
+          border-radius: var(--border-radius, 8px);
+          cursor: pointer;
+          border: 2px solid transparent;
+          transition: background-color 0.2s ease, border-color 0.2s ease;
+        }
+        .currency-option:hover {
+          background-color: rgba(255, 255, 255, 0.12);
+        }
+        .currency-option.selected {
+          border-color: var(--secondary-color, #14F195);
+          background-color: rgba(20, 241, 149, 0.1);
+        }
+        .currency-option input[type="radio"] {
+          margin-right: 12px;
+          accent-color: var(--secondary-color, #14F195);
+          transform: scale(1.2);
+        }
+        .currency-info {
+          display: flex;
+          justify-content: space-between;
+          width: 100%;
+          align-items: center;
+        }
+        .currency-name {
+          font-weight: 500;
+          color: var(--text-color, #FFFFFF);
+        }
+        .currency-balance {
+          font-size: 0.9em;
+          color: var(--text-secondary, #AAAAAA);
+          background-color: rgba(0,0,0,0.2);
+          padding: 3px 8px;
+          border-radius: 4px;
+        }
+        .currency-option.selected .currency-name {
+          color: var(--secondary-color, #14F195);
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default TokenSelector;

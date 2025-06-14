@@ -1,0 +1,48 @@
+# Dev-container modules (pin exact versions for reproducibility)
+# • nodejs-20.11 – needed by Vite/react scripts
+# • rust-1.78    – required for Solana program (`cargo build-bpf`)
+# • web          – Replit web preview tooling
+modules = ["nodejs-20.11", "rust-1.78", "web"]
+# Default run button → launch the Vite dev-server inside `frontend`
+run = ["sh", "-c", "cd frontend && npm install --legacy-peer-deps --no-audit --silent && npm run dev -- --host 0.0.0.0 --port 5000"]
+
+[nix]
+channel = "stable-24_05"
+
+[deployment]
+build = ["sh", "-c", "cd frontend && npm install --legacy-peer-deps --no-audit --silent && npm run build"]
+run   = ["sh", "-c", "cd frontend && npm run preview -- --host 0.0.0.0 --port 5000"]
+
+# Environment variables expected by the app.
+# Configure real values via the Replit “Secrets” tab.
+# NOTE: values here are just fall-back defaults for local CLI use.
+# In Replit these are automatically overridden by Secrets.
+[env]
+VITE_RPC_ENDPOINT="https://api.devnet.solana.com"
+VITE_RPS_PROGRAM_ID="<your_program_id>"
+VITE_RPS_TOKEN_MINT="<optional_token_mint>"
+VITE_FEE_COLLECTOR_ACCOUNT="<fee_collector_pubkey>"
+
+[workflows]
+runButton = "Run Frontend Dev"
+
+[[workflows.workflow]]
+name = "Run Frontend Dev"
+author = 39354119
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "packager.installForAll"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd frontend && npm run dev -- --host 0.0.0.0 --port 5000"
+
+[[workflows.workflow]]
+name = "Run Frontend Prod"
+author = 39354119
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd frontend && npm install --legacy-peer-deps --no-audit --silent && npm run build && npm run preview -- --host 0.0.0.0 --port 5000"

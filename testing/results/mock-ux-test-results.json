@@ -1,0 +1,165 @@
+[
+  {
+    "scenario": "New Player First Game",
+    "success": true,
+    "successRate": "100.0%",
+    "elapsedMs": 4869,
+    "elapsedFormatted": "4.87s",
+    "steps": [
+      {
+        "step": "createGame",
+        "success": true,
+        "elapsed": "1.20s",
+        "details": {
+          "mockStep": true
+        }
+      },
+      {
+        "step": "joinGame",
+        "success": true,
+        "elapsed": "0.94s",
+        "details": {
+          "mockStep": true
+        }
+      },
+      {
+        "step": "commitChoices",
+        "success": true,
+        "elapsed": "1.33s",
+        "details": {
+          "mockStep": true
+        }
+      },
+      {
+        "step": "revealChoices",
+        "success": true,
+        "elapsed": "0.81s",
+        "details": {
+          "mockStep": true
+        }
+      },
+      {
+        "step": "checkResults",
+        "success": true,
+        "elapsed": "0.59s",
+        "details": {
+          "mockStep": true
+        }
+      }
+    ]
+  },
+  {
+    "scenario": "Returning Player",
+    "success": true,
+    "successRate": "100.0%",
+    "elapsedMs": 6952,
+    "elapsedFormatted": "6.95s",
+    "steps": [
+      {
+        "step": "createGame",
+        "success": true,
+        "elapsed": "1.37s",
+        "details": {
+          "mockStep": true
+        }
+      },
+      {
+        "step": "joinGame",
+        "success": true,
+        "elapsed": "0.59s",
+        "details": {
+          "mockStep": true
+        }
+      },
+      {
+        "step": "commitChoices",
+        "success": true,
+        "elapsed": "0.89s",
+        "details": {
+          "mockStep": true
+        }
+      },
+      {
+        "step": "revealChoices",
+        "success": true,
+        "elapsed": "0.66s",
+        "details": {
+          "mockStep": true
+        }
+      },
+      {
+        "step": "createSecondGame",
+        "success": true,
+        "elapsed": "1.08s",
+        "details": {
+          "mockStep": true
+        }
+      },
+      {
+        "step": "joinSecondGame",
+        "success": true,
+        "elapsed": "0.66s",
+        "details": {
+          "mockStep": true
+        }
+      },
+      {
+        "step": "commitChoicesAgain",
+        "success": true,
+        "elapsed": "0.88s",
+        "details": {
+          "mockStep": true
+        }
+      },
+      {
+        "step": "revealChoicesAgain",
+        "success": true,
+        "elapsed": "0.83s",
+        "details": {
+          "mockStep": true
+        }
+      }
+    ]
+  },
+  {
+    "scenario": "Timeout Handling",
+    "success": true,
+    "successRate": "100.0%",
+    "elapsedMs": 3180,
+    "elapsedFormatted": "3.18s",
+    "steps": [
+      {
+        "step": "createGame",
+        "success": true,
+        "elapsed": "0.76s",
+        "details": {
+          "mockStep": true
+        }
+      },
+      {
+        "step": "joinGame",
+        "success": true,
+        "elapsed": "0.73s",
+        "details": {
+          "mockStep": true
+        }
+      },
+      {
+        "step": "commitChoices",
+        "success": true,
+        "elapsed": "1.10s",
+        "details": {
+          "mockStep": true
+        }
+      },
+      {
+        "step": "skipReveal",
+        "success": true,
+        "elapsed": "0.59s",
+        "details": {
+          "mockStep": true
+        }
+      }
+    ]
+  }
+]

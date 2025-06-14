@@ -1,0 +1,7 @@
+# In GitHub Desktop:
+1. Click "Fetch"
+2. Then click "Pull origin"
+
+# Or if using command line:
+git fetch origin
+git pull origin main

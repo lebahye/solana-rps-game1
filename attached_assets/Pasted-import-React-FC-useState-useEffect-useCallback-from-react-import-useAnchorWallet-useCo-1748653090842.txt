@@ -1,0 +1,265 @@
+import React, { FC, useState, useEffect, useCallback } from 'react';
+import { useAnchorWallet, useConnection } from '@solana/wallet-adapter-react';
+import { Program, AnchorProvider, web3, BN, utils } from '@project-serum/anchor';
+import { PublicKey, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { toast } from 'react-toastify';
+
+// Import the IDL and Program ID
+import idl from '../idl/solana_rps.json'; // Adjust path as needed
+const PROGRAM_ID = new PublicKey(idl.metadata.address);
+
+// Placeholder for RPS Token decimals - replace with actual value if needed
+const RPS_TOKEN_DECIMALS = 6; // Example: 6 decimals for RPS token
+
+interface UserProfileData {
+  user: PublicKey;
+  gamesPlayed: BN;
+  gamesWon: BN;
+  gamesLost: BN;
+  gamesDrawn: BN;
+  totalSolWagered: BN;
+  totalRpsWagered: BN;
+  totalSolWon: BN; // Net SOL won (prize - wager)
+  totalRpsWon: BN; // Net RPS won (prize - wager)
+  createdAt: BN;
+  lastPlayedAt: BN;
+  bump: number;
+}
+
+const UserProfile: FC = () => {
+  const { connection } = useConnection();
+  const anchorWallet = useAnchorWallet();
+
+  const [userProfileData, setUserProfileData] = useState<UserProfileData | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [profileExists, setProfileExists] = useState<boolean>(false);
+
+  const getProgram = useCallback(() => {
+    if (!anchorWallet) return null;
+    const provider = new AnchorProvider(connection, anchorWallet, { commitment: 'processed' });
+    return new Program(idl as any, PROGRAM_ID, provider);
+  }, [anchorWallet, connection]);
+
+  const getUserProfilePDA = useCallback(async (userKey: PublicKey) => {
+    const [pda] = await PublicKey.findProgramAddressSync(
+      [Buffer.from(utils.bytes.utf8.encode("user-profile")), userKey.toBuffer()],
+      PROGRAM_ID
+    );
+    return pda;
+  }, []);
+
+  const fetchUserProfile = useCallback(async () => {
+    const program = getProgram();
+    if (!program || !anchorWallet) return;
+
+    setLoading(true);
+    setProfileExists(false);
+    setUserProfileData(null);
+
+    try {
+      const userProfilePDA = await getUserProfilePDA(anchorWallet.publicKey);
+      const data = await program.account.userProfile.fetch(userProfilePDA) as UserProfileData;
+      setUserProfileData(data);
+      setProfileExists(true);
+      toast.success("User profile loaded.");
+    } catch (error: any) {
+      if (error.message.includes("Account does not exist")) {
+        toast.info("User profile not found. You can initialize it.");
+        setProfileExists(false);
+      } else {
+        console.error("Error fetching user profile:", error);
+        toast.error("Failed to fetch user profile.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [getProgram, anchorWallet, getUserProfilePDA]);
+
+  useEffect(() => {
+    if (anchorWallet?.publicKey) {
+      fetchUserProfile();
+    } else {
+      setUserProfileData(null);
+      setProfileExists(false);
+    }
+  }, [anchorWallet, fetchUserProfile]);
+
+  const handleInitializeProfile = async () => {
+    const program = getProgram();
+    if (!program || !anchorWallet) {
+      toast.error("Please connect your wallet first.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const userProfilePDA = await getUserProfilePDA(anchorWallet.publicKey);
+      await program.methods
+        .initializeUserProfile()
+        .accounts({
+          user: anchorWallet.publicKey,
+          userProfile: userProfilePDA,
+          systemProgram: SystemProgram.programId,
+          rent: web3.SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
+      toast.success("User profile initialized successfully!");
+      fetchUserProfile(); // Refresh profile data
+    } catch (error) {
+      console.error("Error initializing user profile:", error);
+      toast.error("Failed to initialize user profile.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Helper to display BN as string, handling potential undefined and decimals
+  const formatBN = (val: BN | undefined, decimals: number = 0, unit: string = "") => {
+    if (val === undefined || val === null) return "N/A";
+    let numVal = val.toNumber();
+    if (decimals > 0) {
+      numVal /= (10 ** decimals);
+      return `${numVal.toFixed(decimals)} ${unit}`;
+    }
+    return `${numVal} ${unit}`;
+  };
+
+  const formatDate = (timestamp: BN | undefined) => {
+    if (timestamp === undefined || timestamp === null || timestamp.toNumber() === 0) return "N/A";
+    return new Date(timestamp.toNumber() * 1000).toLocaleString();
+  };
+
+  if (!anchorWallet?.publicKey) {
+    return (
+      <div className="user-profile-container">
+        <p>Please connect your wallet to view your profile.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="user-profile-container">
+      <h2>User Profile</h2>
+      <p className="wallet-address">Wallet: {anchorWallet.publicKey.toBase58()}</p>
+
+      {loading && <p>Loading profile...</p>}
+
+      {!loading && !profileExists && (
+        <div className="initialize-profile">
+          <p>Your profile has not been initialized yet.</p>
+          <button onClick={handleInitializeProfile} disabled={loading}>
+            Initialize Profile
+          </button>
+        </div>
+      )}
+
+      {!loading && profileExists && userProfileData && (
+        <div className="profile-details">
+          <div className="profile-section">
+            <h3>Game Statistics</h3>
+            <p>Games Played: {formatBN(userProfileData.gamesPlayed)}</p>
+            <p>Games Won: {formatBN(userProfileData.gamesWon)}</p>
+            <p>Games Lost: {formatBN(userProfileData.gamesLost)}</p>
+            <p>Games Drawn: {formatBN(userProfileData.gamesDrawn)}</p>
+          </div>
+
+          <div className="profile-section">
+            <h3>Financials</h3>
+            <p>Total SOL Wagered: {formatBN(userProfileData.totalSolWagered, 9, "SOL")}</p>
+            <p>Total Net SOL Won: {formatBN(userProfileData.totalSolWon, 9, "SOL")}</p>
+            <p>Total RPS Wagered: {formatBN(userProfileData.totalRpsWagered, RPS_TOKEN_DECIMALS, "RPS")}</p>
+            <p>Total Net RPS Won: {formatBN(userProfileData.totalRpsWon, RPS_TOKEN_DECIMALS, "RPS")}</p>
+          </div>
+          
+          <div className="profile-section">
+            <h3>Activity</h3>
+            <p>Profile Created: {formatDate(userProfileData.createdAt)}</p>
+            <p>Last Played: {formatDate(userProfileData.lastPlayedAt)}</p>
+          </div>
+        </div>
+      )}
+      
+      {/* Placeholder for Game History - requires more complex data fetching */}
+      {/* <div className="game-history-section">
+        <h3>Game History</h3>
+        <p>Game history feature coming soon...</p>
+      </div> */}
+
+      <style jsx>{`
+        .user-profile-container {
+          background-color: var(--card-background, #1E1E1E);
+          padding: 20px;
+          border-radius: var(--border-radius, 8px);
+          color: var(--text-color, #FFFFFF);
+          max-width: 700px;
+          margin: 20px auto;
+          box-shadow: var(--box-shadow, 0 4px 12px rgba(0,0,0,0.2));
+        }
+        .user-profile-container h2 {
+          color: var(--primary-color, #9945FF);
+          text-align: center;
+          margin-bottom: 20px;
+        }
+        .wallet-address {
+          font-size: 0.9em;
+          color: var(--text-secondary, #AAAAAA);
+          text-align: center;
+          margin-bottom: 20px;
+          word-break: break-all;
+        }
+        .initialize-profile {
+          text-align: center;
+          padding: 20px;
+        }
+        .initialize-profile button {
+          background-color: var(--secondary-color, #14F195);
+          color: var(--background-color, #121212);
+          padding: 10px 20px;
+          border: none;
+          border-radius: var(--border-radius, 8px);
+          font-weight: bold;
+          cursor: pointer;
+          transition: background-color 0.3s ease;
+        }
+        .initialize-profile button:hover:not(:disabled) {
+          background-color: #0dbf7b;
+        }
+        .initialize-profile button:disabled {
+          opacity: 0.7;
+          cursor: not-allowed;
+        }
+        .profile-details {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+          gap: 20px;
+        }
+        .profile-section {
+          background-color: rgba(255, 255, 255, 0.05);
+          padding: 15px;
+          border-radius: var(--border-radius, 8px);
+        }
+        .profile-section h3 {
+          color: var(--accent-color, #00C2FF);
+          margin-top: 0;
+          margin-bottom: 10px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          padding-bottom: 5px;
+        }
+        .profile-section p {
+          margin-bottom: 8px;
+          font-size: 0.95em;
+        }
+        .game-history-section {
+          margin-top: 30px;
+          padding-top: 20px;
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .game-history-section h3 {
+            color: var(--primary-color, #9945FF);
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default UserProfile;

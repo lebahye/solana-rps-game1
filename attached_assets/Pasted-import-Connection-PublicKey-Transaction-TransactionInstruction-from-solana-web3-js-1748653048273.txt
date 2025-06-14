@@ -1,0 +1,287 @@
+import {
+  Connection,
+  PublicKey,
+  Transaction,
+  TransactionInstruction,
+  SystemProgram,
+} from '@solana/web3.js';
+import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+
+// Custom error types for security validation failures
+export class SecurityValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SecurityValidationError';
+  }
+}
+
+export class InvalidTransactionError extends SecurityValidationError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidTransactionError';
+  }
+}
+
+export class ProgramMismatchError extends SecurityValidationError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProgramMismatchError';
+  }
+}
+
+export class SignatureVerificationError extends SecurityValidationError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SignatureVerificationError';
+  }
+}
+
+export class SuspiciousActivityError extends SecurityValidationError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SuspiciousActivityError';
+  }
+}
+
+/**
+ * SecurityService provides client-side validation for Solana transactions
+ * and interactions to enhance security before sending transactions to the network.
+ * Note: These are client-side checks and do not replace on-chain program validations.
+ */
+export class SecurityService {
+  private expectedProgramId: PublicKey;
+
+  constructor(expectedProgramId: string | PublicKey) {
+    if (typeof expectedProgramId === 'string') {
+      this.expectedProgramId = new PublicKey(expectedProgramId);
+    } else {
+      this.expectedProgramId = expectedProgramId;
+    }
+  }
+
+  /**
+   * Validates a Solana transaction for common security checks.
+   * @param transaction The transaction to validate.
+   * @param expectedFeePayer The public key of the expected fee payer (usually the connected user).
+   * @throws {InvalidTransactionError} if the transaction fails validation.
+   */
+  public validateTransaction(
+    transaction: Transaction,
+    expectedFeePayer: PublicKey,
+  ): void {
+    // 1. Check for a recent blockhash
+    // Note: Full validation of blockhash (checking if it's *actually* recent and not expired)
+    // requires an async call to the RPC node. This check ensures presence.
+    // The wallet and RPC node will ultimately reject expired blockhashes.
+    if (!transaction.recentBlockhash) {
+      throw new InvalidTransactionError('Transaction is missing a recent blockhash.');
+    }
+
+    // 2. Check the fee payer
+    if (!transaction.feePayer) {
+      throw new InvalidTransactionError('Transaction is missing a fee payer.');
+    }
+    if (!transaction.feePayer.equals(expectedFeePayer)) {
+      throw new InvalidTransactionError(
+        `Transaction fee payer mismatch. Expected ${expectedFeePayer.toBase58()}, got ${transaction.feePayer.toBase58()}.`,
+      );
+    }
+
+    // 3. Verify signatures
+    // This checks if the transaction has been signed, particularly by the fee payer.
+    // It doesn't guarantee all *required* signatures for specific instructions are present,
+    // as that depends on the instruction logic.
+    // `verifySignatures(false)` checks if all present signatures are valid.
+    // `verifySignatures(true)` would check if all *required* (based on signersMeta) are present and valid.
+    // For a general client-side check, ensuring the feePayer signed is key.
+    // The RPC node will perform stricter checks.
+    if (!transaction.signatures.length) {
+      throw new SignatureVerificationError('Transaction has no signatures.');
+    }
+
+    const feePayerSignature = transaction.signatures.find(sig => sig.publicKey.equals(expectedFeePayer));
+    if (!feePayerSignature) {
+        throw new SignatureVerificationError(`Transaction not signed by the expected fee payer: ${expectedFeePayer.toBase58()}`);
+    }
+    
+    // `Transaction.verifySignatures()` checks if all provided signatures are valid cryptographic signatures.
+    // It does not check if *all required* signers for the instructions have signed.
+    // That level of detail is typically handled by the on-chain program or deeper client logic.
+    // For this service, we ensure the signatures present are valid.
+    if (!transaction.verifySignatures(false)) { // `false` to only check existing signatures
+        throw new SignatureVerificationError('Transaction contains one or more invalid signatures.');
+    }
+
+    // 4. Verify program interactions within the transaction
+    transaction.instructions.forEach((instruction, index) => {
+      this.verifyProgramInteraction(instruction, index);
+    });
+  }
+
+  /**
+   * Verifies that a specific transaction instruction interacts with the expected program.
+   * This helps prevent users from unknowingly signing transactions that call malicious programs.
+   * @param instruction The transaction instruction to verify.
+   * @param instructionIndex The index of the instruction in the transaction (for logging).
+   * @throws {ProgramMismatchError} if the instruction's program ID is not the expected one.
+   */
+  public verifyProgramInteraction(
+    instruction: TransactionInstruction,
+    instructionIndex?: number,
+  ): void {
+    // This check is relevant for instructions intended for *our* specific game program.
+    // Transactions can contain instructions for other programs (e.g., SPL Token, System Program for ATA creation).
+    // A more sophisticated check might involve a whitelist of allowed program IDs or
+    // specific logic to identify which instructions *should* be for our program.
+    // For now, if an instruction is meant for our game, its programId must match.
+    // This method might be called selectively by the client for game-specific instructions.
+
+    // Example: If we know this specific instruction *must* be for our program.
+    // A more robust implementation would require context on what the instruction is supposed to do.
+    // For now, this is a basic check. If the client knows an instruction is for the game program,
+    // it should call this.
+    
+    // If this service is used to validate *all* instructions, it needs to be smarter.
+    // For instance, allow system program, token program, associated token program, etc.
+    // For now, let's assume this is called for instructions *expected* to be for our main program.
+    // If the instruction's programId is NOT the expectedProgramId, AND it's not a known safe program (like SystemProgram or TokenProgram),
+    // then it could be suspicious.
+    // This is a simplified version focusing on the main game program.
+    const knownSafePrograms = [
+        SystemProgram.programId,
+        TOKEN_PROGRAM_ID,
+        // Add AssociatedTokenProgramId if used directly
+        // new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL") 
+    ];
+
+    if (!instruction.programId.equals(this.expectedProgramId) && !knownSafePrograms.some(p => p.equals(instruction.programId))) {
+      const messagePrefix = instructionIndex !== undefined ? `Instruction ${instructionIndex}` : 'Instruction';
+      throw new ProgramMismatchError(
+        `${messagePrefix} interacts with an unexpected program: ${instruction.programId.toBase58()}. Expected ${this.expectedProgramId.toBase58()} or known system/token programs.`,
+      );
+    }
+  }
+
+  /**
+   * Checks if a blockhash is still valid.
+   * Note: This is an asynchronous operation as it requires fetching the latest blockhash
+   * or fee calculator from the network.
+   * @param blockhash The blockhash to check.
+   * @param connection A Solana Connection object.
+   * @returns {Promise<boolean>} True if the blockhash is still valid, false otherwise.
+   */
+  public async isRecentBlockhashValid(
+    blockhash: string,
+    connection: Connection,
+  ): Promise<boolean> {
+    try {
+      // This method checks if a blockhash is still valid based on the cluster's current state.
+      // It doesn't guarantee the transaction will succeed for other reasons.
+      // Deprecated: `getFeeCalculatorForBlockhash` is deprecated. Using `getFeeForMessage` with a dummy message.
+      // A more direct way is `connection.isBlockhashValid(blockhash)` if available and suitable.
+      // For now, we'll rely on the fact that `sendTransaction` will fail if blockhash is too old.
+      // This client-side check is more of a UX pre-flight.
+      // A simple heuristic: check if it's reasonably "fresh" by trying to get its status.
+      // `getBlockHeight()` can be used to see current height, but relating that to blockhash age is non-trivial client-side.
+      
+      // A robust check involves `connection.getLatestBlockhash()` and comparing,
+      // or using `connection.isBlockhashValid(blockhash)` if that API suits the need.
+      // For simplicity, this client-side check might be limited. The wallet/RPC handles final validation.
+      // This is a placeholder for a more robust async check if needed.
+      // For now, we assume the presence check in `validateTransaction` is the primary synchronous step.
+      const response = await connection.getLatestBlockhash('confirmed');
+      // This doesn't directly validate the *input* blockhash, but confirms connection.
+      // True validation of a specific blockhash's expiry is complex client-side without specific slot info.
+      return !!response.blockhash; // Placeholder: True if we can get *a* recent blockhash
+    } catch (error) {
+      console.error('Error checking blockhash validity:', error);
+      return false; // Assume invalid on error
+    }
+  }
+
+  /**
+   * Sanitizes input data. This is a placeholder, as true sanitization depends on the
+   * data type and context. It's best to validate and sanitize specific inputs
+   * (e.g., user-entered strings for seeds/salts) before they are used in transactions.
+   * @param input The data to sanitize.
+   * @returns The sanitized data.
+   */
+  public sanitizeStringInput(input: string): string {
+    // Example: Trim whitespace and limit length for something like a 'salt' or 'seed'
+    const trimmed = input.trim();
+    // Adjust maxLength based on expected usage (e.g., salt for hashing)
+    const maxLength = 64; 
+    if (trimmed.length > maxLength) {
+      // Consider throwing an error or truncating based on requirements
+      console.warn(`Input string truncated to ${maxLength} characters.`);
+      return trimmed.substring(0, maxLength);
+    }
+    // Further sanitization (e.g., removing potentially harmful characters) can be added if necessary,
+    // depending on how the string is used (e.g., if displayed in UI vs. just used for hashing).
+    // For cryptographic salts/seeds, character set might be less of an issue than length/entropy.
+    return trimmed;
+  }
+
+
+  /**
+   * Placeholder for detecting suspicious activity based on request context.
+   * In a real app, this might involve analyzing transaction patterns,
+   * requested permissions, or comparing against known malicious signatures/addresses.
+   * @param requestContext Contextual information about the wallet request or transaction.
+   */
+  public detectSuspiciousActivity(requestContext: {
+    type: 'transaction' | 'signMessage' | 'connect';
+    details?: any;
+    origin?: string;
+  }): void {
+    // Basic example: Log if the origin is unexpected for a connection request
+    if (requestContext.type === 'connect' && requestContext.origin) {
+      const allowedOrigins: string[] = ['http://localhost:3000', 'https://your-production-domain.com']; // Configure this
+      if (!allowedOrigins.includes(requestContext.origin)) {
+        console.warn(`Suspicious connection attempt from origin: ${requestContext.origin}`);
+        // Potentially throw SuspiciousActivityError or notify user through UI
+        // throw new SuspiciousActivityError(`Connection attempt from untrusted origin: ${requestContext.origin}`);
+      }
+    }
+
+    // Example: Flag transactions with unusually high value or to unknown addresses
+    if (requestContext.type === 'transaction' && requestContext.details) {
+      const tx = requestContext.details as Transaction;
+      // This is highly contextual. For a game, "high value" might be relative to typical wagers.
+      // tx.instructions.forEach(ix => {
+      //   // Analyze instruction data, e.g., transfer amounts
+      // });
+    }
+    // This function is highly dependent on the application's specific risks and capabilities.
+  }
+}
+
+// Example Usage (typically in your transaction building/sending logic):
+//
+// const securityService = new SecurityService("YOUR_RPS_PROGRAM_ID");
+//
+// async function handleSendTransaction(transaction: Transaction, userPublicKey: PublicKey, connection: Connection) {
+//   try {
+//     // Client-side pre-flight checks
+//     securityService.validateTransaction(transaction, userPublicKey);
+//
+//     // Optional: More detailed blockhash check if needed for UX before wallet prompt
+//     // if (!(await securityService.isRecentBlockhashValid(transaction.recentBlockhash!, connection))) {
+//     //   toast.error("Transaction has expired, please try again.");
+//     //   return;
+//     // }
+//
+//     // Proceed to send with wallet
+//     // const signature = await sendTransaction(transaction, connection);
+//     // await connection.confirmTransaction(signature, 'processed');
+//     // toast.success("Transaction successful!");
+//
+//   } catch (error) {
+//     if (error instanceof SecurityValidationError) {
+//       toast.error(`Security Alert: ${error.message}`);
+//     } else {
+//       toast.error(`Transaction failed: ${error.message}`);
+//     }
+//     console.error("Transaction error:", error);
+//   }
+// }

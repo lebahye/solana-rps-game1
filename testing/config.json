@@ -1,0 +1,17 @@
+{
+  "networkUrl": "https://api.devnet.solana.com",
+  "programId": "7Y9dRMY6V9cmVkXNFrHeUZmYf2tAV5wSVFcYyD5bLQpZ",
+  "feePercentage": 0.001,
+  "testWallets": {
+    "count": 4,
+    "fundAmount": 2
+  },
+  "testRuns": {
+    "fairnessTests": 100,
+    "feeTests": 20,
+    "concurrentGames": 5
+  },
+  "wagerAmounts": [0.01, 0.1, 0.5, 1.0],
+  "expectedFeeBasisPoints": 10,
+  "feeCollectorAddress": "FeeKHhL1CcJCyd82xextWTbBT5jGzVQwXVQKNjHV8SDD"
+}

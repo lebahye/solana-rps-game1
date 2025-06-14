@@ -1,0 +1,709 @@
+use anchor_lang::prelude::*;
+use anchor_spl::token::{self, Mint, Token, TokenAccount};
+use anchor_lang::solana_program::{
+    program::invoke_signed,
+    system_instruction,
+};
+use crate::token_integration::{WagerCurrency, get_rps_mint};
+
+// Admin PDA seed
+pub const ADMIN_SEED: &[u8] = b"admin";
+
+// Admin configuration account
+#[account]
+pub struct AdminConfig {
+    // Authority that can perform admin operations
+    pub authority: Pubkey,
+    
+    // Fee configuration
+    pub sol_fee_percent: u64,
+    pub rps_token_fee_percent: u64,
+    
+    // Fee recipients
+    pub sol_fee_recipient: Pubkey,
+    pub rps_fee_recipient: Pubkey,
+    
+    // Game statistics
+    pub total_games_played: u64,
+    pub total_sol_wagered: u64,
+    pub total_rps_wagered: u64,
+    pub total_sol_fees_collected: u64,
+    pub total_rps_fees_collected: u64,
+    
+    // Game outcome statistics
+    pub creator_wins: u64,
+    pub joiner_wins: u64,
+    pub draws: u64,
+    pub timeouts: u64,
+    
+    // Exchange rate for SOL to RPS (represented as RPS per SOL * 10^9)
+    pub exchange_rate: u64,
+    
+    // Emergency controls
+    pub paused: bool,
+    
+    // Reserved for future upgrades
+    pub bump: u8,
+    pub reserved: [u8; 64],
+}
+
+impl AdminConfig {
+    pub const SIZE: usize = 8 + // discriminator
+        32 + // authority
+        8 + // sol_fee_percent
+        8 + // rps_token_fee_percent
+        32 + // sol_fee_recipient
+        32 + // rps_fee_recipient
+        8 + // total_games_played
+        8 + // total_sol_wagered
+        8 + // total_rps_wagered
+        8 + // total_sol_fees_collected
+        8 + // total_rps_fees_collected
+        8 + // creator_wins
+        8 + // joiner_wins
+        8 + // draws
+        8 + // timeouts
+        8 + // exchange_rate
+        1 + // paused
+        1 + // bump
+        64; // reserved
+}
+
+// Initialize admin configuration
+pub fn initialize_admin(
+    ctx: Context<InitializeAdmin>,
+    sol_fee_percent: u64,
+    rps_token_fee_percent: u64,
+    exchange_rate: u64,
+) -> Result<()> {
+    let admin_config = &mut ctx.accounts.admin_config;
+    let authority = &ctx.accounts.authority;
+    
+    // Initialize admin config
+    admin_config.authority = authority.key();
+    admin_config.sol_fee_percent = sol_fee_percent;
+    admin_config.rps_token_fee_percent = rps_token_fee_percent;
+    admin_config.sol_fee_recipient = ctx.accounts.sol_fee_recipient.key();
+    admin_config.rps_fee_recipient = ctx.accounts.rps_fee_recipient.key();
+    admin_config.total_games_played = 0;
+    admin_config.total_sol_wagered = 0;
+    admin_config.total_rps_wagered = 0;
+    admin_config.total_sol_fees_collected = 0;
+    admin_config.total_rps_fees_collected = 0;
+    admin_config.creator_wins = 0;
+    admin_config.joiner_wins = 0;
+    admin_config.draws = 0;
+    admin_config.timeouts = 0;
+    admin_config.exchange_rate = exchange_rate;
+    admin_config.paused = false;
+    admin_config.bump = *ctx.bumps.get("admin_config").unwrap();
+    
+    // Initialize reserved space
+    admin_config.reserved = [0; 64];
+    
+    emit!(AdminInitializedEvent {
+        admin: admin_config.key(),
+        authority: authority.key(),
+        sol_fee_percent,
+        rps_token_fee_percent,
+        exchange_rate,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+    
+    Ok(())
+}
+
+// Update fee configuration
+pub fn update_fees(
+    ctx: Context<UpdateAdmin>,
+    sol_fee_percent: u64,
+    rps_token_fee_percent: u64,
+) -> Result<()> {
+    let admin_config = &mut ctx.accounts.admin_config;
+    
+    // Validate fee percentages (max 10%)
+    require!(sol_fee_percent <= 10, AdminError::FeeTooHigh);
+    require!(rps_token_fee_percent <= 10, AdminError::FeeTooHigh);
+    
+    // Update fee percentages
+    admin_config.sol_fee_percent = sol_fee_percent;
+    admin_config.rps_token_fee_percent = rps_token_fee_percent;
+    
+    emit!(FeesUpdatedEvent {
+        admin: admin_config.key(),
+        sol_fee_percent,
+        rps_token_fee_percent,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+    
+    Ok(())
+}
+
+// Update fee recipients
+pub fn update_fee_recipients(
+    ctx: Context<UpdateAdmin>,
+    sol_fee_recipient: Pubkey,
+    rps_fee_recipient: Pubkey,
+) -> Result<()> {
+    let admin_config = &mut ctx.accounts.admin_config;
+    
+    // Update fee recipients
+    admin_config.sol_fee_recipient = sol_fee_recipient;
+    admin_config.rps_fee_recipient = rps_fee_recipient;
+    
+    emit!(FeeRecipientsUpdatedEvent {
+        admin: admin_config.key(),
+        sol_fee_recipient,
+        rps_fee_recipient,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+    
+    Ok(())
+}
+
+// Update exchange rate
+pub fn update_exchange_rate(
+    ctx: Context<UpdateAdmin>,
+    exchange_rate: u64,
+) -> Result<()> {
+    let admin_config = &mut ctx.accounts.admin_config;
+    
+    // Update exchange rate
+    admin_config.exchange_rate = exchange_rate;
+    
+    emit!(ExchangeRateUpdatedEvent {
+        admin: admin_config.key(),
+        exchange_rate,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+    
+    Ok(())
+}
+
+// Pause or unpause the game
+pub fn set_pause_state(
+    ctx: Context<UpdateAdmin>,
+    paused: bool,
+) -> Result<()> {
+    let admin_config = &mut ctx.accounts.admin_config;
+    
+    // Update pause state
+    admin_config.paused = paused;
+    
+    emit!(PauseStateUpdatedEvent {
+        admin: admin_config.key(),
+        paused,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+    
+    Ok(())
+}
+
+// Transfer admin authority
+pub fn transfer_authority(
+    ctx: Context<TransferAuthority>,
+    new_authority: Pubkey,
+) -> Result<()> {
+    let admin_config = &mut ctx.accounts.admin_config;
+    
+    // Update authority
+    admin_config.authority = new_authority;
+    
+    emit!(AuthorityTransferredEvent {
+        admin: admin_config.key(),
+        old_authority: ctx.accounts.authority.key(),
+        new_authority,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+    
+    Ok(())
+}
+
+// Withdraw SOL fees
+pub fn withdraw_sol_fees(
+    ctx: Context<WithdrawFees>,
+    amount: u64,
+) -> Result<()> {
+    let admin_config = &ctx.accounts.admin_config;
+    let fee_vault = &ctx.accounts.fee_vault;
+    
+    // Check if amount is available
+    let vault_balance = fee_vault.lamports();
+    require!(amount <= vault_balance, AdminError::InsufficientFunds);
+    
+    // Transfer SOL from fee vault to recipient
+    let transfer_instruction = system_instruction::transfer(
+        &fee_vault.key(),
+        &ctx.accounts.recipient.key(),
+        amount,
+    );
+    
+    invoke_signed(
+        &transfer_instruction,
+        &[
+            fee_vault.to_account_info(),
+            ctx.accounts.recipient.to_account_info(),
+            ctx.accounts.system_program.to_account_info(),
+        ],
+        &[&[
+            b"fee-vault",
+            admin_config.key().as_ref(),
+            &[ctx.bumps["fee_vault"]],
+        ]],
+    )?;
+    
+    emit!(FeesWithdrawnEvent {
+        admin: admin_config.key(),
+        recipient: ctx.accounts.recipient.key(),
+        amount,
+        currency: WagerCurrency::Sol,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+    
+    Ok(())
+}
+
+// Withdraw RPS token fees
+pub fn withdraw_rps_fees(
+    ctx: Context<WithdrawTokenFees>,
+    amount: u64,
+) -> Result<()> {
+    let admin_config = &ctx.accounts.admin_config;
+    let fee_token_account = &ctx.accounts.fee_token_account;
+    
+    // Check if amount is available
+    require!(amount <= fee_token_account.amount, AdminError::InsufficientFunds);
+    
+    // Transfer tokens from fee account to recipient
+    token::transfer(
+        CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            token::Transfer {
+                from: fee_token_account.to_account_info(),
+                to: ctx.accounts.recipient_token_account.to_account_info(),
+                authority: ctx.accounts.fee_vault.to_account_info(),
+            },
+            &[&[
+                b"fee-vault",
+                admin_config.key().as_ref(),
+                &[ctx.bumps["fee_vault"]],
+            ]],
+        ),
+        amount,
+    )?;
+    
+    emit!(FeesWithdrawnEvent {
+        admin: admin_config.key(),
+        recipient: ctx.accounts.recipient.key(),
+        amount,
+        currency: WagerCurrency::RpsToken,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+    
+    Ok(())
+}
+
+// Update game statistics
+pub fn update_game_stats(
+    admin_config: &mut Account<AdminConfig>,
+    wager_amount: u64,
+    fee_amount: u64,
+    currency: WagerCurrency,
+    result: GameResult,
+) -> Result<()> {
+    // Update game count
+    admin_config.total_games_played += 1;
+    
+    // Update wager statistics
+    match currency {
+        WagerCurrency::Sol => {
+            admin_config.total_sol_wagered += wager_amount;
+            admin_config.total_sol_fees_collected += fee_amount;
+        },
+        WagerCurrency::RpsToken => {
+            admin_config.total_rps_wagered += wager_amount;
+            admin_config.total_rps_fees_collected += fee_amount;
+        },
+    }
+    
+    // Update outcome statistics
+    match result {
+        GameResult::CreatorWon => admin_config.creator_wins += 1,
+        GameResult::JoinerWon => admin_config.joiner_wins += 1,
+        GameResult::Draw => admin_config.draws += 1,
+        GameResult::Timeout => admin_config.timeouts += 1,
+    }
+    
+    Ok(())
+}
+
+// Emergency fund recovery (for stuck funds)
+pub fn emergency_recover_funds(
+    ctx: Context<EmergencyRecover>,
+    amount: u64,
+    is_token: bool,
+) -> Result<()> {
+    let admin_config = &ctx.accounts.admin_config;
+    
+    if is_token {
+        // Recover tokens
+        let token_account = &ctx.accounts.token_account.as_ref()
+            .ok_or(AdminError::MissingTokenAccount)?;
+        let recipient_token = &ctx.accounts.recipient_token.as_ref()
+            .ok_or(AdminError::MissingTokenAccount)?;
+        let token_program = &ctx.accounts.token_program.as_ref()
+            .ok_or(AdminError::MissingTokenProgram)?;
+        
+        // Check if amount is available
+        require!(amount <= token_account.amount, AdminError::InsufficientFunds);
+        
+        // Transfer tokens from account to recipient
+        token::transfer(
+            CpiContext::new_with_signer(
+                token_program.to_account_info(),
+                token::Transfer {
+                    from: token_account.to_account_info(),
+                    to: recipient_token.to_account_info(),
+                    authority: ctx.accounts.stuck_account.to_account_info(),
+                },
+                &[&[
+                    b"emergency",
+                    admin_config.key().as_ref(),
+                    &[ctx.bumps["stuck_account"]],
+                ]],
+            ),
+            amount,
+        )?;
+    } else {
+        // Recover SOL
+        let stuck_account = &ctx.accounts.stuck_account;
+        
+        // Check if amount is available
+        let account_balance = stuck_account.lamports();
+        require!(amount <= account_balance, AdminError::InsufficientFunds);
+        
+        // Transfer SOL from stuck account to recipient
+        let transfer_instruction = system_instruction::transfer(
+            &stuck_account.key(),
+            &ctx.accounts.recipient.key(),
+            amount,
+        );
+        
+        invoke_signed(
+            &transfer_instruction,
+            &[
+                stuck_account.to_account_info(),
+                ctx.accounts.recipient.to_account_info(),
+                ctx.accounts.system_program.to_account_info(),
+            ],
+            &[&[
+                b"emergency",
+                admin_config.key().as_ref(),
+                &[ctx.bumps["stuck_account"]],
+            ]],
+        )?;
+    }
+    
+    emit!(EmergencyRecoveryEvent {
+        admin: admin_config.key(),
+        stuck_account: ctx.accounts.stuck_account.key(),
+        recipient: ctx.accounts.recipient.key(),
+        amount,
+        is_token,
+        timestamp: Clock::get()?.unix_timestamp,
+    });
+    
+    Ok(())
+}
+
+// Check if program is paused
+pub fn check_not_paused(admin_config: &Account<AdminConfig>) -> Result<()> {
+    require!(!admin_config.paused, AdminError::ProgramPaused);
+    Ok(())
+}
+
+// Get admin PDA
+pub fn get_admin_pda() -> (Pubkey, u8) {
+    Pubkey::find_program_address(&[ADMIN_SEED], &crate::ID)
+}
+
+// Get fee vault PDA
+pub fn get_fee_vault_pda(admin: &Pubkey) -> (Pubkey, u8) {
+    Pubkey::find_program_address(&[b"fee-vault", admin.as_ref()], &crate::ID)
+}
+
+// Account contexts for admin operations
+#[derive(Accounts)]
+pub struct InitializeAdmin<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    
+    #[account(
+        init,
+        payer = authority,
+        space = AdminConfig::SIZE,
+        seeds = [ADMIN_SEED],
+        bump
+    )]
+    pub admin_config: Account<'info, AdminConfig>,
+    
+    /// CHECK: This is the SOL fee recipient
+    pub sol_fee_recipient: AccountInfo<'info>,
+    
+    /// CHECK: This is the RPS token fee recipient
+    pub rps_fee_recipient: AccountInfo<'info>,
+    
+    #[account(
+        init,
+        payer = authority,
+        space = 0,
+        seeds = [b"fee-vault", admin_config.key().as_ref()],
+        bump
+    )]
+    /// CHECK: This is the fee vault for SOL
+    pub fee_vault: AccountInfo<'info>,
+    
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateAdmin<'info> {
+    #[account(
+        constraint = authority.key() == admin_config.authority @ AdminError::Unauthorized
+    )]
+    pub authority: Signer<'info>,
+    
+    #[account(
+        mut,
+        seeds = [ADMIN_SEED],
+        bump = admin_config.bump
+    )]
+    pub admin_config: Account<'info, AdminConfig>,
+}
+
+#[derive(Accounts)]
+pub struct TransferAuthority<'info> {
+    #[account(
+        constraint = authority.key() == admin_config.authority @ AdminError::Unauthorized
+    )]
+    pub authority: Signer<'info>,
+    
+    #[account(
+        mut,
+        seeds = [ADMIN_SEED],
+        bump = admin_config.bump
+    )]
+    pub admin_config: Account<'info, AdminConfig>,
+}
+
+#[derive(Accounts)]
+pub struct WithdrawFees<'info> {
+    #[account(
+        constraint = authority.key() == admin_config.authority @ AdminError::Unauthorized
+    )]
+    pub authority: Signer<'info>,
+    
+    #[account(
+        seeds = [ADMIN_SEED],
+        bump = admin_config.bump
+    )]
+    pub admin_config: Account<'info, AdminConfig>,
+    
+    #[account(
+        mut,
+        seeds = [b"fee-vault", admin_config.key().as_ref()],
+        bump
+    )]
+    /// CHECK: This is the fee vault for SOL
+    pub fee_vault: AccountInfo<'info>,
+    
+    #[account(mut)]
+    /// CHECK: This is the recipient of the withdrawn fees
+    pub recipient: AccountInfo<'info>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct WithdrawTokenFees<'info> {
+    #[account(
+        constraint = authority.key() == admin_config.authority @ AdminError::Unauthorized
+    )]
+    pub authority: Signer<'info>,
+    
+    #[account(
+        seeds = [ADMIN_SEED],
+        bump = admin_config.bump
+    )]
+    pub admin_config: Account<'info, AdminConfig>,
+    
+    #[account(
+        seeds = [b"fee-vault", admin_config.key().as_ref()],
+        bump
+    )]
+    /// CHECK: This is the fee vault authority
+    pub fee_vault: AccountInfo<'info>,
+    
+    #[account(
+        mut,
+        constraint = fee_token_account.mint == get_rps_mint() @ AdminError::InvalidTokenMint,
+        constraint = fee_token_account.owner == fee_vault.key() @ AdminError::InvalidTokenAccount
+    )]
+    pub fee_token_account: Account<'info, TokenAccount>,
+    
+    #[account(
+        mut,
+        constraint = recipient_token_account.mint == get_rps_mint() @ AdminError::InvalidTokenMint
+    )]
+    pub recipient_token_account: Account<'info, TokenAccount>,
+    
+    #[account(mut)]
+    /// CHECK: This is the recipient of the withdrawn fees
+    pub recipient: AccountInfo<'info>,
+    
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct EmergencyRecover<'info> {
+    #[account(
+        constraint = authority.key() == admin_config.authority @ AdminError::Unauthorized
+    )]
+    pub authority: Signer<'info>,
+    
+    #[account(
+        seeds = [ADMIN_SEED],
+        bump = admin_config.bump
+    )]
+    pub admin_config: Account<'info, AdminConfig>,
+    
+    #[account(
+        mut,
+        seeds = [b"emergency", admin_config.key().as_ref()],
+        bump
+    )]
+    /// CHECK: This is the stuck account to recover funds from
+    pub stuck_account: AccountInfo<'info>,
+    
+    #[account(mut)]
+    /// CHECK: This is the recipient of the recovered funds
+    pub recipient: AccountInfo<'info>,
+    
+    /// Token account to recover from (optional)
+    pub token_account: Option<Account<'info, TokenAccount>>,
+    
+    /// Recipient token account (optional)
+    pub recipient_token: Option<Account<'info, TokenAccount>>,
+    
+    /// Token program (optional)
+    pub token_program: Option<Program<'info, Token>>,
+    
+    pub system_program: Program<'info, System>,
+}
+
+// Game result enum (copied from main program)
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum GameResult {
+    CreatorWon,
+    JoinerWon,
+    Draw,
+    Timeout,
+}
+
+// Admin-specific errors
+#[error_code]
+pub enum AdminError {
+    #[msg("Unauthorized access to admin function")]
+    Unauthorized,
+    
+    #[msg("Fee percentage too high (max 10%)")]
+    FeeTooHigh,
+    
+    #[msg("Insufficient funds for withdrawal")]
+    InsufficientFunds,
+    
+    #[msg("Program is currently paused")]
+    ProgramPaused,
+    
+    #[msg("Token account is required for this operation")]
+    MissingTokenAccount,
+    
+    #[msg("Token program is required for this operation")]
+    MissingTokenProgram,
+    
+    #[msg("Invalid token mint")]
+    InvalidTokenMint,
+    
+    #[msg("Invalid token account owner")]
+    InvalidTokenAccount,
+}
+
+// Admin events
+#[event]
+pub struct AdminInitializedEvent {
+    pub admin: Pubkey,
+    pub authority: Pubkey,
+    pub sol_fee_percent: u64,
+    pub rps_token_fee_percent: u64,
+    pub exchange_rate: u64,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct FeesUpdatedEvent {
+    pub admin: Pubkey,
+    pub sol_fee_percent: u64,
+    pub rps_token_fee_percent: u64,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct FeeRecipientsUpdatedEvent {
+    pub admin: Pubkey,
+    pub sol_fee_recipient: Pubkey,
+    pub rps_fee_recipient: Pubkey,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct ExchangeRateUpdatedEvent {
+    pub admin: Pubkey,
+    pub exchange_rate: u64,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct PauseStateUpdatedEvent {
+    pub admin: Pubkey,
+    pub paused: bool,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct AuthorityTransferredEvent {
+    pub admin: Pubkey,
+    pub old_authority: Pubkey,
+    pub new_authority: Pubkey,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct FeesWithdrawnEvent {
+    pub admin: Pubkey,
+    pub recipient: Pubkey,
+    pub amount: u64,
+    pub currency: WagerCurrency,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct EmergencyRecoveryEvent {
+    pub admin: Pubkey,
+    pub stuck_account: Pubkey,
+    pub recipient: Pubkey,
+    pub amount: u64,
+    pub is_token: bool,
+    pub timestamp: i64,
+}

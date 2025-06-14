@@ -1,0 +1,424 @@
+import React, { FC, useState, useEffect, useCallback } from 'react';
+import { useAnchorWallet, useConnection } from '@solana/wallet-adapter-react';
+import { Program, AnchorProvider, web3, BN, utils } from '@project-serum/anchor';
+import { PublicKey, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from '@solana/spl-token';
+import { toast } from 'react-toastify';
+
+// Import the IDL and Program ID (assuming they are accessible, e.g., from a constants file)
+import idl from '../idl/solana_rps.json'; // Adjust path as needed
+const PROGRAM_ID = new PublicKey(idl.metadata.address); // Or your actual program ID
+
+// Placeholder for RPS Token Mint - replace with your actual mint address
+const RPS_TOKEN_MINT_ADDRESS = "RPSTokenMint111111111111111111111111111111"; 
+
+interface AdminData {
+  authority: PublicKey;
+  solFeePercent: BN;
+  rpsTokenFeePercent: BN;
+  solFeeRecipient: PublicKey;
+  rpsFeeRecipient: PublicKey;
+  totalGamesPlayed: BN;
+  totalSolWagered: BN;
+  totalRpsWagered: BN;
+  totalSolFeesCollected: BN;
+  totalRpsFeesCollected: BN;
+  creatorWins: BN;
+  joinerWins: BN;
+  draws: BN;
+  timeouts: BN;
+  exchangeRate: BN; // RPS tokens per SOL * 10^9
+  paused: boolean;
+  bump: number;
+}
+
+const AdminDashboard: FC = () => {
+  const { connection } = useConnection();
+  const anchorWallet = useAnchorWallet();
+
+  const [adminData, setAdminData] = useState<AdminData | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+
+  // Form states
+  const [newSolFee, setNewSolFee] = useState('');
+  const [newRpsFee, setNewRpsFee] = useState('');
+  const [newSolRecipient, setNewSolRecipient] = useState('');
+  const [newRpsRecipient, setNewRpsRecipient] = useState('');
+  const [newExchangeRate, setNewExchangeRate] = useState(''); // User inputs as RPS per SOL
+  const [newPauseState, setNewPauseState] = useState(false);
+  const [withdrawSolAmount, setWithdrawSolAmount] = useState('');
+  const [withdrawRpsAmount, setWithdrawRpsAmount] = useState('');
+  const [solWithdrawRecipient, setSolWithdrawRecipient] = useState('');
+  const [rpsWithdrawRecipientTokenAcc, setRpsWithdrawRecipientTokenAcc] = useState('');
+  const [newAdminAuthority, setNewAdminAuthority] = useState('');
+
+  const getProgram = useCallback(() => {
+    if (!anchorWallet) return null;
+    const provider = new AnchorProvider(connection, anchorWallet, { commitment: 'processed' });
+    return new Program(idl as any, PROGRAM_ID, provider);
+  }, [anchorWallet, connection]);
+
+  const getAdminConfigPDA = useCallback(async () => {
+    const [pda] = await PublicKey.findProgramAddressSync(
+      [Buffer.from(utils.bytes.utf8.encode("admin"))],
+      PROGRAM_ID
+    );
+    return pda;
+  }, []);
+
+  const getFeeVaultPDA = useCallback(async (adminConfigKey: PublicKey) => {
+    const [pda] = await PublicKey.findProgramAddressSync(
+      [Buffer.from(utils.bytes.utf8.encode("fee-vault")), adminConfigKey.toBuffer()],
+      PROGRAM_ID
+    );
+    return pda;
+  }, []);
+
+  const fetchAdminData = useCallback(async () => {
+    const program = getProgram();
+    if (!program || !anchorWallet) return;
+
+    setLoading(true);
+    try {
+      const adminConfigPDA = await getAdminConfigPDA();
+      const data = await program.account.adminConfig.fetch(adminConfigPDA) as AdminData;
+      setAdminData(data);
+      if (data.authority.equals(anchorWallet.publicKey)) {
+        setIsAdmin(true);
+        setNewPauseState(data.paused); // Initialize pause state toggle
+      } else {
+        setIsAdmin(false);
+      }
+    } catch (error) {
+      console.error("Error fetching admin data:", error);
+      toast.error("Failed to fetch admin data.");
+      setAdminData(null);
+      setIsAdmin(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [getProgram, anchorWallet, getAdminConfigPDA]);
+
+  useEffect(() => {
+    if (anchorWallet) {
+      fetchAdminData();
+    } else {
+      setAdminData(null);
+      setIsAdmin(false);
+    }
+  }, [anchorWallet, fetchAdminData]);
+
+  // Admin Action Handlers
+  const handleUpdateFees = async () => {
+    const program = getProgram();
+    if (!program || !anchorWallet || !adminData) return;
+    setLoading(true);
+    try {
+      const adminConfigPDA = await getAdminConfigPDA();
+      await program.methods
+        .updateFees(new BN(newSolFee), new BN(newRpsFee))
+        .accounts({
+          authority: anchorWallet.publicKey,
+          adminConfig: adminConfigPDA,
+        })
+        .rpc();
+      toast.success("Fees updated successfully!");
+      fetchAdminData();
+    } catch (error) {
+      console.error("Error updating fees:", error);
+      toast.error("Failed to update fees.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateFeeRecipients = async () => {
+    const program = getProgram();
+    if (!program || !anchorWallet || !adminData) return;
+    setLoading(true);
+    try {
+      const adminConfigPDA = await getAdminConfigPDA();
+      await program.methods
+        .updateFeeRecipients(new PublicKey(newSolRecipient), new PublicKey(newRpsRecipient))
+        .accounts({
+          authority: anchorWallet.publicKey,
+          adminConfig: adminConfigPDA,
+        })
+        .rpc();
+      toast.success("Fee recipients updated successfully!");
+      fetchAdminData();
+    } catch (error) {
+      console.error("Error updating fee recipients:", error);
+      toast.error("Failed to update fee recipients.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateExchangeRate = async () => {
+    const program = getProgram();
+    if (!program || !anchorWallet || !adminData) return;
+    setLoading(true);
+    try {
+      const adminConfigPDA = await getAdminConfigPDA();
+      // Convert user input (RPS per SOL) to the format stored in contract (RPS per SOL * 10^9)
+      const rate = new BN(parseFloat(newExchangeRate) * (10**9));
+      await program.methods
+        .updateExchangeRate(rate)
+        .accounts({
+          authority: anchorWallet.publicKey,
+          adminConfig: adminConfigPDA,
+        })
+        .rpc();
+      toast.success("Exchange rate updated successfully!");
+      fetchAdminData();
+    } catch (error) {
+      console.error("Error updating exchange rate:", error);
+      toast.error("Failed to update exchange rate.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSetPauseState = async () => {
+    const program = getProgram();
+    if (!program || !anchorWallet || !adminData) return;
+    setLoading(true);
+    try {
+      const adminConfigPDA = await getAdminConfigPDA();
+      await program.methods
+        .setPauseState(!adminData.paused) // Toggle current state
+        .accounts({
+          authority: anchorWallet.publicKey,
+          adminConfig: adminConfigPDA,
+        })
+        .rpc();
+      toast.success(`Game ${!adminData.paused ? "paused" : "unpaused"} successfully!`);
+      fetchAdminData();
+    } catch (error) {
+      console.error("Error setting pause state:", error);
+      toast.error("Failed to set pause state.");
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleWithdrawSolFees = async () => {
+    const program = getProgram();
+    if (!program || !anchorWallet || !adminData) return;
+    setLoading(true);
+    try {
+        const adminConfigPDA = await getAdminConfigPDA();
+        const feeVaultPDA = await getFeeVaultPDA(adminConfigPDA);
+        const amountLamports = new BN(parseFloat(withdrawSolAmount) * LAMPORTS_PER_SOL);
+
+        await program.methods
+            .withdrawSolFees(amountLamports)
+            .accounts({
+                authority: anchorWallet.publicKey,
+                adminConfig: adminConfigPDA,
+                feeVault: feeVaultPDA,
+                recipient: new PublicKey(solWithdrawRecipient),
+                systemProgram: SystemProgram.programId,
+            })
+            .rpc();
+        toast.success("SOL fees withdrawn successfully!");
+        fetchAdminData();
+    } catch (error) {
+        console.error("Error withdrawing SOL fees:", error);
+        toast.error("Failed to withdraw SOL fees.");
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const handleWithdrawRpsFees = async () => {
+    const program = getProgram();
+    if (!program || !anchorWallet || !adminData) return;
+    setLoading(true);
+    try {
+        const adminConfigPDA = await getAdminConfigPDA();
+        const feeVaultPDA = await getFeeVaultPDA(adminConfigPDA);
+        const rpsMint = new PublicKey(RPS_TOKEN_MINT_ADDRESS);
+        
+        const feeTokenAccount = await getAssociatedTokenAddress(rpsMint, feeVaultPDA, true); // ATA owned by feeVaultPDA
+
+        // Assuming amount is in smallest unit of RPS token
+        const amountTokens = new BN(withdrawRpsAmount); 
+
+        await program.methods
+            .withdrawRpsFees(amountTokens)
+            .accounts({
+                authority: anchorWallet.publicKey,
+                adminConfig: adminConfigPDA,
+                feeVault: feeVaultPDA,
+                feeTokenAccount: feeTokenAccount,
+                recipientTokenAccount: new PublicKey(rpsWithdrawRecipientTokenAcc),
+                recipient: anchorWallet.publicKey, // The recipient field in instruction is for event logging
+                tokenProgram: TOKEN_PROGRAM_ID,
+                systemProgram: SystemProgram.programId, // May not be needed if ATAs exist
+            })
+            .rpc();
+        toast.success("RPS token fees withdrawn successfully!");
+        fetchAdminData();
+    } catch (error) {
+        console.error("Error withdrawing RPS fees:", error);
+        toast.error("Failed to withdraw RPS fees.");
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const handleTransferAuthority = async () => {
+    const program = getProgram();
+    if (!program || !anchorWallet || !adminData) return;
+    setLoading(true);
+    try {
+        const adminConfigPDA = await getAdminConfigPDA();
+        await program.methods
+            .transferAuthority(new PublicKey(newAdminAuthority))
+            .accounts({
+                authority: anchorWallet.publicKey,
+                adminConfig: adminConfigPDA,
+            })
+            .rpc();
+        toast.success("Admin authority transferred successfully! You will lose admin access if the new authority is different.");
+        fetchAdminData(); // This will likely show "Not Authorized" if transfer was to another key
+    } catch (error) {
+        console.error("Error transferring authority:", error);
+        toast.error("Failed to transfer authority.");
+    } finally {
+        setLoading(false);
+    }
+  };
+
+
+  if (!anchorWallet) {
+    return <div className="admin-dashboard"><p>Please connect your wallet to view the admin dashboard.</p></div>;
+  }
+
+  if (loading && !adminData) {
+    return <div className="admin-dashboard"><p>Loading admin data...</p></div>;
+  }
+
+  if (!isAdmin) {
+    return <div className="admin-dashboard"><p>You are not authorized to view this page.</p></div>;
+  }
+
+  if (!adminData) {
+    return <div className="admin-dashboard"><p>No admin data found. Ensure the admin config is initialized.</p></div>;
+  }
+
+  // Helper to display BN as string, handling potential undefined
+  const bnToString = (val: BN | undefined, decimals: number = 0) => {
+    if (val === undefined) return "N/A";
+    if (decimals > 0) {
+        return (val.toNumber() / (10 ** decimals)).toFixed(decimals);
+    }
+    return val.toString();
+  }
+
+
+  return (
+    <div className="admin-dashboard">
+      <h2>Admin Dashboard</h2>
+      
+      <section className="admin-stats">
+        <h3>Game Statistics</h3>
+        <p>Authority: {adminData.authority.toBase58()}</p>
+        <p>Total Games Played: {bnToString(adminData.totalGamesPlayed)}</p>
+        <p>Total SOL Wagered: {bnToString(adminData.totalSolWagered, 9)} SOL</p>
+        <p>Total RPS Wagered: {bnToString(adminData.totalRpsWagered, 6)} RPS (assuming 6 decimals)</p>
+        <p>Total SOL Fees Collected: {bnToString(adminData.totalSolFeesCollected, 9)} SOL</p>
+        <p>Total RPS Fees Collected: {bnToString(adminData.totalRpsFeesCollected, 6)} RPS</p>
+        <p>Creator Wins: {bnToString(adminData.creatorWins)}</p>
+        <p>Joiner Wins: {bnToString(adminData.joinerWins)}</p>
+        <p>Draws: {bnToString(adminData.draws)}</p>
+        <p>Timeouts: {bnToString(adminData.timeouts)}</p>
+      </section>
+
+      <section className="admin-config">
+        <h3>Configuration</h3>
+        <p>SOL Fee Percent: {bnToString(adminData.solFeePercent)}%</p>
+        <p>RPS Token Fee Percent: {bnToString(adminData.rpsTokenFeePercent)}%</p>
+        <p>SOL Fee Recipient: {adminData.solFeeRecipient.toBase58()}</p>
+        <p>RPS Fee Recipient: {adminData.rpsFeeRecipient.toBase58()}</p>
+        <p>Exchange Rate (RPS per SOL): {(adminData.exchangeRate.toNumber() / (10**9)).toFixed(2)}</p>
+        <p>Game Paused: {adminData.paused ? 'Yes' : 'No'}</p>
+      </section>
+
+      <section className="admin-actions">
+        <h3>Admin Actions</h3>
+
+        <div>
+          <h4>Update Fees</h4>
+          <input type="number" placeholder="New SOL Fee % (e.g., 1 for 1%)" value={newSolFee} onChange={e => setNewSolFee(e.target.value)} />
+          <input type="number" placeholder="New RPS Fee % (e.g., 1 for 1%)" value={newRpsFee} onChange={e => setNewRpsFee(e.target.value)} />
+          <button onClick={handleUpdateFees} disabled={loading}>Update Fees</button>
+        </div>
+
+        <div>
+          <h4>Update Fee Recipients</h4>
+          <input type="text" placeholder="New SOL Fee Recipient PK" value={newSolRecipient} onChange={e => setNewSolRecipient(e.target.value)} />
+          <input type="text" placeholder="New RPS Fee Recipient PK" value={newRpsRecipient} onChange={e => setNewRpsRecipient(e.target.value)} />
+          <button onClick={handleUpdateFeeRecipients} disabled={loading}>Update Recipients</button>
+        </div>
+        
+        <div>
+          <h4>Update Exchange Rate</h4>
+          <input type="number" placeholder="New Exchange Rate (RPS per SOL)" value={newExchangeRate} onChange={e => setNewExchangeRate(e.target.value)} />
+          <button onClick={handleUpdateExchangeRate} disabled={loading}>Update Rate</button>
+        </div>
+
+        <div>
+          <h4>Pause/Unpause Game</h4>
+          <button onClick={handleSetPauseState} disabled={loading}>
+            {adminData.paused ? 'Unpause Game' : 'Pause Game'}
+          </button>
+        </div>
+
+        <div>
+            <h4>Withdraw SOL Fees</h4>
+            <input type="text" placeholder="Recipient Pubkey" value={solWithdrawRecipient} onChange={e => setSolWithdrawRecipient(e.target.value)} />
+            <input type="number" placeholder="Amount (SOL)" value={withdrawSolAmount} onChange={e => setWithdrawSolAmount(e.target.value)} />
+            <button onClick={handleWithdrawSolFees} disabled={loading || !solWithdrawRecipient || !withdrawSolAmount}>Withdraw SOL</button>
+        </div>
+
+        <div>
+            <h4>Withdraw RPS Token Fees</h4>
+            <input type="text" placeholder="Recipient RPS Token Account PK" value={rpsWithdrawRecipientTokenAcc} onChange={e => setRpsWithdrawRecipientTokenAcc(e.target.value)} />
+            <input type="number" placeholder="Amount (RPS units)" value={withdrawRpsAmount} onChange={e => setWithdrawRpsAmount(e.target.value)} />
+            <button onClick={handleWithdrawRpsFees} disabled={loading || !rpsWithdrawRecipientTokenAcc || !withdrawRpsAmount}>Withdraw RPS</button>
+        </div>
+
+        <div>
+            <h4>Transfer Admin Authority</h4>
+            <input type="text" placeholder="New Admin Authority Pubkey" value={newAdminAuthority} onChange={e => setNewAdminAuthority(e.target.value)} />
+            <button onClick={handleTransferAuthority} disabled={loading || !newAdminAuthority}>Transfer Authority</button>
+        </div>
+      </section>
+
+      <style jsx>{`
+        .admin-dashboard { padding: 20px; max-width: 800px; margin: auto; color: #ccc; }
+        .admin-dashboard h2, .admin-dashboard h3, .admin-dashboard h4 { color: #9945FF; margin-top: 20px; margin-bottom:10px; }
+        .admin-dashboard section { background: #2a2a2a; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .admin-dashboard p { margin-bottom: 8px; word-break: break-all; }
+        .admin-dashboard input { 
+            display: block; width: calc(100% - 20px); padding: 8px; margin-bottom: 10px; 
+            background: #333; border: 1px solid #555; color: #fff; border-radius: 4px;
+        }
+        .admin-dashboard button { 
+            background-color: #9945FF; color: white; padding: 10px 15px; border: none; 
+            border-radius: 4px; cursor: pointer; margin-right: 10px; margin-top:5px;
+        }
+        .admin-dashboard button:hover:not(:disabled) { background-color: #7a38cc; }
+        .admin-dashboard button:disabled { background-color: #555; cursor: not-allowed; }
+        .admin-dashboard div > div { margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #444;}
+        .admin-dashboard div > div:last-child { border-bottom: none; }
+      `}</style>
+    </div>
+  );
+};
+
+export default AdminDashboard;
