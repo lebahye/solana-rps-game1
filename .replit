@@ -18,7 +18,7 @@ VITE_RPS_TOKEN_MINT="<optional_token_mint>"
 VITE_FEE_COLLECTOR_ACCOUNT="<fee_collector_pubkey>"
 
 [workflows]
-runButton = "Run Frontend Prod"
+runButton = "Run Frontend Dev"
 
 [[workflows.workflow]]
 name = "Run Frontend Dev"

@@ -1,15 +1,35 @@
-// Polyfill setup for browser compatibility with Node.js modules
+
+// Enhanced polyfill setup for browser compatibility with Node.js modules
 import { Buffer } from 'buffer';
 
 // Make Buffer available globally
-window.Buffer = Buffer;
+if (typeof window !== 'undefined') {
+  window.Buffer = Buffer;
+  window.global = window.global || window;
+  
+  // Add process polyfill
+  window.process = window.process || {
+    env: {},
+    version: '',
+    platform: 'browser',
+    nextTick: (fn) => Promise.resolve().then(fn),
+    cwd: () => '/',
+    argv: []
+  };
 
-// Add process polyfill
-window.process = {
-  env: {},
-  version: '',
-  platform: 'browser',
-  nextTick: (fn) => Promise.resolve().then(fn)
-};
+  console.log('✓ Polyfills loaded - Buffer and process are now available');
+} else {
+  console.warn('⚠ Window object not available - running in non-browser environment');
+}
 
-console.log('Polyfills loaded - Buffer and process are now available');
+// Additional crypto polyfill for older browsers
+if (typeof window !== 'undefined' && !window.crypto) {
+  window.crypto = {
+    getRandomValues: (arr) => {
+      for (let i = 0; i < arr.length; i++) {
+        arr[i] = Math.floor(Math.random() * 256);
+      }
+      return arr;
+    }
+  };
+}

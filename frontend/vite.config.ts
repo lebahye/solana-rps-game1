@@ -4,10 +4,15 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    global: 'globalThis',
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      'buffer': 'buffer/',
+      'buffer': 'buffer',
+      'process': 'process/browser',
+      'util': 'util',
       '@solana/web3.js': path.resolve(__dirname, 'node_modules/@solana/web3.js'),
     },
   },
@@ -17,7 +22,15 @@ export default defineConfig({
         global: 'globalThis',
       },
     },
-    include: ['@solana/web3.js'],
+    include: [
+      '@solana/web3.js',
+      '@solana/wallet-adapter-base',
+      '@solana/wallet-adapter-react',
+      '@solana/wallet-adapter-phantom',
+      'buffer',
+      'process/browser',
+      'util'
+    ],
   },
   build: {
     commonjsOptions: {
