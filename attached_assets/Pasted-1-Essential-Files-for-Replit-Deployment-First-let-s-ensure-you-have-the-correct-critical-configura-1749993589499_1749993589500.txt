@@ -1,0 +1,258 @@
+1. Essential Files for Replit Deployment
+First, let's ensure you have the correct critical configuration files:
+
+A. .replit File
+Create this file in the root directory with exactly this content:
+
+toml
+entrypoint = "frontend/index.html"
+run = ["npm", "run", "start"]
+deploymentTarget = "static"
+
+[languages.javascript]
+pattern = "**/{*.js,*.jsx,*.ts,*.tsx}"
+syntax = "javascript"
+
+[languages.javascript.languageServer]
+start = ["typescript-language-server", "--stdio"]
+
+[env]
+VITE_RPC_ENDPOINT = "https://api.devnet.solana.com"
+XDG_CONFIG_HOME = "/home/runner/.config"
+PATH = "/home/runner/$REPL_SLUG/.config/npm/node_global/bin:/home/runner/$REPL_SLUG/node_modules/.bin"
+npm_config_prefix = "/home/runner/$REPL_SLUG/.config/npm/node_global"
+
+[gitHubImport]
+requiredFiles = [".replit"]
+
+[interpreter]
+command = ["prybar-nodejs", "-q", "--ps1", "\u0001\u001B[33m\u0002\u0001\u001B[00m\u0002 ", "-i"]
+
+[packager]
+language = "nodejs"
+
+[packager.features]
+packageSearch = true
+guessImports = true
+enabledForHosting = false
+
+[languages]
+
+[languages.html]
+pattern = "**/*.html"
+syntax = "html"
+
+[languages.css]
+pattern = "**/*.css"
+syntax = "css"
+
+[languages.rust]
+pattern = "**/*.rs"
+syntax = "rust"
+
+[hosting]
+route = "/"
+directory = "frontend/dist"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[auth]
+pageEnabled = false
+buttonEnabled = false
+
+[[runners]]
+name = "frontend-dev"
+language = "nodejs"
+onBoot = "cd frontend && npm install --legacy-peer-deps && npm run dev -- --host 0.0.0.0 --port 5000"
+
+B. replit.nix File
+Create this in the root directory:
+
+nix
+{ pkgs }: {
+  deps = [
+    pkgs.nodejs-18_x
+    pkgs.rustc
+    pkgs.cargo
+    pkgs.pkg-config
+    pkgs.openssl.dev
+  ];
+}
+
+2. Fix Frontend Package Configuration
+Modify frontend/package.json to include all necessary dependencies:
+
+json
+{
+  "name": "solana-rps-game",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "vite preview --host 0.0.0.0 --port 5000"
+  },
+  "dependencies": {
+    "@solana/web3.js": "1.98.0",
+    "@solana/wallet-adapter-base": "0.9.24",
+    "@solana/wallet-adapter-react": "0.15.36",
+    "@solana/wallet-adapter-react-ui": "0.9.36",
+    "@solana/wallet-adapter-wallets": "0.19.33",
+    "borsh": "0.7.0",
+    "buffer": "6.0.3",
+    "js-sha256": "0.11.0",
+    "process": "0.11.10",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.18",
+    "@types/react-dom": "18.3.5",
+    "@vitejs/plugin-react": "4.3.4",
+    "typescript": "5.6.2",
+    "vite": "5.1.4",
+    "tailwindcss": "3.4.1",
+    "autoprefixer": "10.4.19",
+    "postcss": "8.4.38"
+  }
+}
+
+3. Create a Simple Root package.json
+Add this to the root directory:
+
+json
+{
+  "name": "solana-rps-game-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "postinstall": "cd frontend && npm install --legacy-peer-deps",
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "start": "cd frontend && npm run preview -- --host 0.0.0.0 --port 5000"
+  }
+}
+
+4. Fix Tailwind Configuration
+Ensure frontend/tailwind.config.js has the correct format:
+
+javascript
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+  theme: {
+    extend: {
+      // Your theme extension
+    },
+  },
+  plugins: []
+};
+
+5. Fix PostCSS Configuration
+Ensure frontend/postcss.config.js is in the correct format:
+
+javascript
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+
+6. Create .npmrc File
+Create this in both the root and frontend directories:
+
+plaintext
+legacy-peer-deps=true
+
+7. Fix Vite Configuration
+Ensure frontend/vite.config.ts has:
+
+typescript
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    host: '0.0.0.0',
+    port: 5000,
+    strictPort: true
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: true
+  },
+  define: {
+    'process.env': process.env,
+    'global': 'window'
+  }
+})
+
+8. Step-by-Step Guide to Run on Replit
+Create a new Replit:
+
+Go to replit.com
+Click "Create Repl"
+Choose "Import from GitHub"
+Enter your repository URL
+Add Secret Environment Variables:
+
+Go to the "Secrets" tab (lock icon in sidebar)
+Add:
+VITE_RPC_ENDPOINT = https://api.devnet.solana.com
+VITE_RPS_PROGRAM_ID = Your program ID
+Install Dependencies:
+
+Wait for the automatic installation
+If it fails, open the Shell tab and run:
+bash
+npm install
+cd frontend
+npm install --legacy-peer-deps
+
+Start the App:
+
+Click the "Run" button
+The app should start in the webview
+If It Still Fails:
+
+Check the console for errors
+In the Shell tab run:
+bash
+cd frontend
+rm -rf node_modules
+npm install --legacy-peer-deps
+npm run dev -- --host 0.0.0.0 --port 5000
+
+9. Common Error Fixes for Replit
+"Buffer is not defined":
+
+Add this to the top of frontend/src/main.tsx:
+typescript
+import { Buffer } from 'buffer';
+window.Buffer = Buffer;
+
+"Module not found":
+
+Check that all imports use correct paths
+Use relative paths (./module rather than module)
+"Node version incompatible":
+
+Check the replit.nix file has pkgs.nodejs-18_x
+Add a .nvmrc file with 18.17.0
+"Port already in use":
+
+Ensure you're using port 5000 as specified above
+10. Additional Troubleshooting
+If you provide the specific error messages from the Replit console, I can give more targeted solutions. Here are some general issues to check:
+
+Check for API Rate Limits: Replit might be hitting API rate limits with Solana's devnet
+WebSocket Connections: Replit might block certain WebSocket connections
+Memory Limitations: Replit free tier has memory limits that might affect the app
+Browser Compatibility: Ensure the app works in modern browsers
