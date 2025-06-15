@@ -462,35 +462,4 @@ class AudioService {
 // Export a singleton instance
 const audioService = new AudioService();
 export default audioService;
-export enum BackgroundMusic {
-  MainMenu = 'main-menu',
-  Gameplay = 'gameplay',
-  Victory = 'victory'
-}
 
-class AudioService {
-  private currentMusic: string | null = null;
-  private volume = 0.5;
-
-  playBackgroundMusic(music: BackgroundMusic, loop = true, force = false) {
-    if (this.currentMusic === music && !force) return;
-    
-    console.log(`Playing background music: ${music}`);
-    this.currentMusic = music;
-  }
-
-  playSound(soundName: string) {
-    console.log(`Playing sound: ${soundName}`);
-  }
-
-  setVolume(volume: number) {
-    this.volume = Math.max(0, Math.min(1, volume));
-  }
-
-  getVolume(): number {
-    return this.volume;
-  }
-}
-
-const audioService = new AudioService();
-export default audioService;

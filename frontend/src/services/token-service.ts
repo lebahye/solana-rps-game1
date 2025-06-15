@@ -846,36 +846,4 @@ export const getFreeRPSTokens = async (
 if (typeof window !== 'undefined' && typeof window.Buffer === 'undefined') {
   window.Buffer = Buffer;
 }
-import { Connection, PublicKey } from '@solana/web3.js';
-import { TokenBalance } from '../types';
 
-export async function getTokenBalances(
-  connection: Connection,
-  publicKey: PublicKey
-): Promise<TokenBalance> {
-  try {
-    // Get SOL balance
-    const solBalance = await connection.getBalance(publicKey);
-    const solInLamports = solBalance / 1_000_000_000; // Convert from lamports to SOL
-
-    // Mock RPS token balance for now
-    const rpsTokenBalance = 100; // Default free tokens
-
-    return {
-      sol: solInLamports,
-      rpsToken: rpsTokenBalance
-    };
-  } catch (error) {
-    console.error('Error fetching token balances:', error);
-    return { sol: 0, rpsToken: 0 };
-  }
-}
-
-export async function getFreeRPSTokens(
-  connection: Connection,
-  publicKey: PublicKey
-): Promise<void> {
-  console.log('Getting free RPS tokens for:', publicKey.toString());
-  // Mock implementation - in real app this would mint tokens
-  return Promise.resolve();
-}

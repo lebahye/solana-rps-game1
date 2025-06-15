@@ -79,15 +79,4 @@ export const ConnectionStatus: React.FC = () => {
 import React from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 
-export const ConnectionStatus: React.FC = () => {
-  const { connected, publicKey } = useWallet();
 
-  return (
-    <div className="flex items-center space-x-2">
-      <div className={`w-3 h-3 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
-      <span className="text-sm">
-        {connected ? `Connected: ${publicKey?.toString().slice(0, 4)}...` : 'Not Connected'}
-      </span>
-    </div>
-  );
-};
