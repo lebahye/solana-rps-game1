@@ -1,0 +1,143 @@
+1. Fix PostCSS Configuration Error
+The most critical issue is the module system conflict. Let's rename postcss.config.js to postcss.config.cjs to explicitly use CommonJS:
+
+bash
+# In the Replit shell
+mv frontend/postcss.config.js frontend/postcss.config.cjs
+
+And ensure the content is:
+
+javascript
+// postcss.config.cjs
+module.exports = {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+
+2. Fix Package.json Module Type
+Remove the "type": "module" from frontend/package.json to prevent ES module conflicts:
+
+json
+{
+  "name": "solana-rps-game",
+  "private": true,
+  "version": "1.0.0",
+  // Remove this line: "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  // Rest of the file...
+}
+
+3. Fix Wallet Adapter Versions
+Update the wallet adapter packages to compatible versions:
+
+json
+"dependencies": {
+  "@solana/web3.js": "1.87.6",
+  "@solana/wallet-adapter-base": "0.9.23",
+  "@solana/wallet-adapter-react": "0.15.35",
+  "@solana/wallet-adapter-react-ui": "0.9.34",
+  "@solana/wallet-adapter-wallets": "0.19.22",
+  "@solana/wallet-adapter-ledger": "0.9.25",
+  // Other dependencies...
+}
+
+4. Fix Polyfill Script in index.html
+Add the type="module" attribute to the polyfill script:
+
+html
+<!-- Change this: -->
+<script nomodule src="/src/polyfill-bundle.js"></script>
+
+<!-- To this: -->
+<script type="module" src="/src/polyfill-bundle.js"></script>
+
+5. Fix TailwindCSS Configuration
+Update tailwind.config.js to use CommonJS syntax:
+
+javascript
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+  theme: {
+    extend: {
+      // Your theme extensions
+    },
+  },
+  plugins: [] // Remove any missing plugins
+};
+
+6. Update Vite Configuration
+Change vite.config.ts to use CommonJS to maintain consistency:
+
+javascript
+// vite.config.js or vite.config.ts
+const { defineConfig } = require('vite');
+const react = require('@vitejs/plugin-react');
+
+module.exports = defineConfig({
+  plugins: [react()],
+  server: {
+    host: '0.0.0.0',
+    port: 5000,
+    strictPort: true
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: true
+  },
+  define: {
+    'process.env': process.env,
+    'global': 'window'
+  }
+})
+
+7. Create .env.local File
+Create a frontend/.env.local file with essential environment variables:
+
+plaintext
+VITE_RPC_ENDPOINT=https://api.devnet.solana.com
+VITE_RPS_PROGRAM_ID=your_program_id_here
+
+8. Add a start.sh Script
+For Replit reliability, create a start.sh file in the root:
+
+bash
+#!/bin/bash
+echo "Starting Solana RPS Game..."
+cd frontend
+npm install --legacy-peer-deps
+npm run dev -- --host 0.0.0.0 --port 5000
+
+Then make it executable:
+
+bash
+chmod +x start.sh
+
+And update your Replit run command to:
+
+plaintext
+./start.sh
+
+9. Update the .replit file
+Make sure your .replit file has:
+
+toml
+run = "./start.sh"
+hidden = [".config", "package-lock.json"]
+
+# Additional Replit configuration...
+
+[env]
+VITE_RPC_ENDPOINT = "https://api.devnet.solana.com"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+These changes should resolve the module system conflicts, package versioning issues, and configuration problems that are causing your app to crash. The main issue is the mismatch between CommonJS and ES modules, which is a common problem in modern JavaScript projects.
