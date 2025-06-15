@@ -3,7 +3,6 @@
   "name": "solana-rps-game",
   "private": true,
   "version": "1.0.0",
-  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -18,7 +17,7 @@
     "@solana/wallet-adapter-wallets": "0.19.33",
     "@solana/wallet-adapter-backpack": "0.1.12",
     "@solana/wallet-adapter-coinbase": "0.1.18",
-    "@solana/wallet-adapter-ledger": "0.12.1",
+    "@solana/wallet-adapter-ledger": "0.9.25",
     "@solana/wallet-adapter-phantom": "0.9.24",
     "@solana/wallet-adapter-solflare": "0.6.28",
     "borsh": "0.7.0",
