@@ -166,3 +166,36 @@
   transform-origin: center;
   opacity: 0;
 }
+/* Particle animations */
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-20px) rotate(10deg); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.5); }
+  50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.8); }
+}
+
+.particle {
+  position: absolute;
+  pointer-events: none;
+  animation: float 3s ease-in-out infinite;
+}
+
+.glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Game choice animations */
+.choice-button {
+  transition: all 0.3s ease;
+}
+
+.choice-button:hover {
+  transform: scale(1.1);
+}
+
+.choice-button:active {
+  transform: scale(0.95);
+}

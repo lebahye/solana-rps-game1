@@ -104,3 +104,31 @@ const SoundControl: React.FC<SoundControlProps> = ({ showVolume = false, classNa
 };
 
 export default SoundControl;
+import React, { useState } from 'react';
+import audioService from '../services/audio-service';
+
+const SoundControl: React.FC = () => {
+  const [volume, setVolume] = useState(audioService.getVolume());
+
+  const handleVolumeChange = (newVolume: number) => {
+    setVolume(newVolume);
+    audioService.setVolume(newVolume);
+  };
+
+  return (
+    <div className="flex items-center space-x-2">
+      <span className="text-sm">🔊</span>
+      <input
+        type="range"
+        min="0"
+        max="1"
+        step="0.1"
+        value={volume}
+        onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+        className="w-16"
+      />
+    </div>
+  );
+};
+
+export default SoundControl;

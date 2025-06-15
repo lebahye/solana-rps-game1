@@ -42,64 +42,6 @@ import { BackgroundMusic } from './services/audio-service';
 
 // Error boundary component
 import ErrorBoundary from './components/ErrorBoundary';
-class ErrorBoundary extends Component<{children: React.ReactNode}, {hasError: boolean, error: Error | null}> {
-  constructor(props: {children: React.ReactNode}) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("App error:", error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="error-container" style={{
-          padding: '20px',
-          margin: '20px',
-          backgroundColor: '#300',
-          color: 'white',
-          borderRadius: '8px',
-          fontFamily: 'sans-serif'
-        }}>
-          <h2 style={{ color: '#f55' }}>Something went wrong</h2>
-          <p>There was an issue loading the application:</p>
-          <pre style={{
-            backgroundColor: '#222',
-            padding: '10px',
-            borderRadius: '4px',
-            overflow: 'auto',
-            maxHeight: '200px'
-          }}>
-            {this.state.error?.toString() || 'Unknown error'}
-          </pre>
-          <p>The most common cause is missing browser polyfills for Node.js built-ins.</p>
-          <button
-            onClick={() => window.location.reload()}
-            style={{
-              backgroundColor: '#f55',
-              color: 'white',
-              border: 'none',
-              padding: '8px 16px',
-              borderRadius: '4px',
-              marginTop: '12px',
-              cursor: 'pointer'
-            }}
-          >
-            Reload Application
-          </button>
-        </div>
-      );
-    }
-
-    return this.props.children;
-  }
-}
 
 // Default to devnet for development
 const network = WalletAdapterNetwork.Devnet;

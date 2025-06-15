@@ -32,3 +32,19 @@ export const Header: React.FC = () => {
     </header>
   );
 };
+import React from 'react';
+
+interface HeaderProps {
+  children?: React.ReactNode;
+}
+
+export const Header: React.FC<HeaderProps> = ({ children }) => {
+  return (
+    <header className="w-full bg-gray-900 text-white p-4">
+      <div className="container mx-auto flex justify-between items-center">
+        <h1 className="text-xl font-bold">Solana RPS Game</h1>
+        {children}
+      </div>
+    </header>
+  );
+};

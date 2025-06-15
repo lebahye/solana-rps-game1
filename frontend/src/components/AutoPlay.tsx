@@ -77,3 +77,24 @@ export const AutoPlay: React.FC = () => {
     </div>
   );
 };
+import React from 'react';
+
+interface AutoPlayProps {
+  isActive: boolean;
+  onToggle: () => void;
+}
+
+export const AutoPlay: React.FC<AutoPlayProps> = ({ isActive, onToggle }) => {
+  return (
+    <div className="flex items-center space-x-2">
+      <button
+        onClick={onToggle}
+        className={`px-4 py-2 rounded ${
+          isActive ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-600 hover:bg-gray-700'
+        } text-white`}
+      >
+        {isActive ? 'Stop AutoPlay' : 'Start AutoPlay'}
+      </button>
+    </div>
+  );
+};

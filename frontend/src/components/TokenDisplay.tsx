@@ -89,3 +89,33 @@ const TokenDisplay: React.FC<TokenDisplayProps> = ({
 };
 
 export default TokenDisplay;
+import React from 'react';
+import { TokenBalance } from '../types';
+
+interface TokenDisplayProps {
+  balance: TokenBalance;
+  loading: boolean;
+  onClick?: () => void;
+}
+
+const TokenDisplay: React.FC<TokenDisplayProps> = ({ balance, loading, onClick }) => {
+  if (loading) {
+    return <div className="text-sm">Loading balances...</div>;
+  }
+
+  return (
+    <div 
+      className="flex items-center space-x-4 cursor-pointer hover:bg-gray-800 p-2 rounded"
+      onClick={onClick}
+    >
+      <div className="text-sm">
+        <span className="font-semibold">{balance.sol.toFixed(4)}</span> SOL
+      </div>
+      <div className="text-sm">
+        <span className="font-semibold">{balance.rpsToken.toFixed(2)}</span> RPS
+      </div>
+    </div>
+  );
+};
+
+export default TokenDisplay;
