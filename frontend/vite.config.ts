@@ -25,15 +25,10 @@ export default defineConfig({
       },
     },
     include: [
-      '@solana/web3.js',
-      '@solana/wallet-adapter-base',
-      '@solana/wallet-adapter-react',
-      '@solana/wallet-adapter-phantom',
-      '@solana/spl-token',
-      'rpc-websockets',
       'buffer',
       'process/browser',
-      'util'
+      '@solana/web3.js',
+      'rpc-websockets',
     ],
   },
   build: {

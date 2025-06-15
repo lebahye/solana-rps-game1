@@ -18,11 +18,11 @@ import { struct, safeDeserialize } from './utils/fixborsh';
 // Import additional types and functions for currency support
 import { CurrencyMode } from './types';
 import {
-  calculateFee,
   calculateBonusPot,
   FEE_ACCOUNT,
   RPS_TOKEN_MINT,
-  createPaymentTransaction
+  createPaymentTransaction,
+  calculateFeeFromNumber
 } from './services/token-service';
 
 // Define schema for Borsh serialization/deserialization
@@ -350,7 +350,7 @@ export class RPSGameClient {
       await this.connection.confirmTransaction(txId, 'confirmed');
 
       // Calculate fee for display purposes
-      const fee = calculateFee(entryFeeSol, currencyMode);
+      const fee = calculateFeeFromNumber(entryFeeSol, currencyMode);
       this.notifyStatus(`Game created with ${fee.toFixed(6)} ${currencyMode === CurrencyMode.SOL ? 'SOL' : 'RPSTOKEN'} fee.`);
 
       // Get the created game account
@@ -1006,6 +1006,8 @@ export class RPSGameClient {
           continue;
         }
       }
+
+```python
 
       return activeGames;
     } catch (error) {
