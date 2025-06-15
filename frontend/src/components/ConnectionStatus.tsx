@@ -18,7 +18,7 @@ export const ConnectionStatus: React.FC = () => {
   useEffect(() => {
     const updatePlayerStatus = async () => {
       if (!connected || !publicKey) return;
-      
+
       try {
         // Update current player's status
         const currentPlayer: Player = {
@@ -26,12 +26,12 @@ export const ConnectionStatus: React.FC = () => {
           status: 'available',
           lastSeen: Date.now(),
         };
-        
+
         setPlayers(prev => {
           const others = prev.filter(p => p.publicKey !== currentPlayer.publicKey);
           return [...others, currentPlayer];
         });
-        
+
         // Clean up old players (inactive for more than 5 minutes)
         const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
         setPlayers(prev => prev.filter(p => p.lastSeen > fiveMinutesAgo));
@@ -75,5 +75,3 @@ export const ConnectionStatus: React.FC = () => {
     </div>
   );
 };
-
-

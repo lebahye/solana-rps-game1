@@ -156,6 +156,18 @@ export const createPaymentTransaction = (
   return transaction;
 };
 
+// Fix calculateFee function overload for rps-client compatibility
+export function calculateFee(entryFeeAmount: number, currency: CurrencyMode): number {
+  if (typeof entryFeeAmount === 'number') {
+    const entryFeeBigInt = BigInt(Math.floor(entryFeeAmount * LAMPORTS_PER_SOL));
+    const feeBigInt = (entryFeeBigInt * BigInt(FEE_PERCENTAGE_NUMERATOR)) / BigInt(FEE_PERCENTAGE_DENOMINATOR);
+    return Number(feeBigInt) / LAMPORTS_PER_SOL;
+  }
+  // For bigint input (existing function)
+  const feeBigInt = (BigInt(entryFeeAmount) * BigInt(FEE_PERCENTAGE_NUMERATOR)) / BigInt(FEE_PERCENTAGE_DENOMINATOR);
+  return Number(feeBigInt);
+}
+
 // --- Transaction Tracking ---
 // Track recent transactions to prevent duplicates
 interface TrackedTransaction {
