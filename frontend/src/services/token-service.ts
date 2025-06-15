@@ -75,7 +75,7 @@ export class InsufficientFundsError extends TokenServiceError {
 
 export class TransactionSimulationError extends TokenServiceError {
   logs?: string[];
-  
+
   constructor(msg: string, logs?: string[]) {
     super(`Transaction simulation failed: ${msg}`);
     this.name = 'TransactionSimulationError';
@@ -106,16 +106,16 @@ class TransactionRateLimiter {
     const now = Date.now();
     // Remove expired timestamps
     this.transactions = this.transactions.filter(time => now - time < this.windowMs);
-    
+
     if (this.transactions.length < this.maxTransactions) {
       this.transactions.push(now);
       return { allowed: true, waitTime: 0 };
     }
-    
+
     // Calculate wait time until next transaction would be allowed
     const oldestTransaction = this.transactions[0];
     const waitTime = this.windowMs - (now - oldestTransaction);
-    
+
     return { allowed: false, waitTime: Math.max(0, waitTime) };
   }
 }
@@ -142,7 +142,7 @@ export const createPaymentTransaction = (
   currency: CurrencyMode
 ): Transaction => {
   const transaction = new Transaction();
-  
+
   if (currency === CurrencyMode.SOL) {
     transaction.add(
       SystemProgram.transfer({
@@ -152,7 +152,7 @@ export const createPaymentTransaction = (
       })
     );
   }
-  
+
   return transaction;
 };
 
@@ -175,7 +175,7 @@ interface TrackedTransaction {
 class TransactionTracker {
   private recentTransactions: Map<string, TrackedTransaction> = new Map();
   private readonly expirationTime: number = 60000; // 1 minute
-  
+
   addTransaction(fingerprint: string, signature?: string): void {
     this.cleanExpired();
     this.recentTransactions.set(fingerprint, {
@@ -185,14 +185,14 @@ class TransactionTracker {
       status: 'pending'
     });
   }
-  
+
   updateStatus(fingerprint: string, status: 'confirmed' | 'failed'): void {
     const tx = this.recentTransactions.get(fingerprint);
     if (tx) {
       tx.status = status;
     }
   }
-  
+
   isDuplicate(fingerprint: string): boolean {
     this.cleanExpired();
     const tx = this.recentTransactions.get(fingerprint);
@@ -200,7 +200,7 @@ class TransactionTracker {
     // and is still pending or was confirmed
     return tx !== undefined && (tx.status === 'pending' || tx.status === 'confirmed');
   }
-  
+
   private cleanExpired(): void {
     const now = Date.now();
     for (const [key, tx] of this.recentTransactions.entries()) {
@@ -209,7 +209,7 @@ class TransactionTracker {
       }
     }
   }
-  
+
   // Generate a fingerprint based on transaction details
   static generateFingerprint(
     fromPubkey: PublicKey, 
@@ -268,7 +268,7 @@ export const getRPSTokenBalance = async (
 
     const tokenAccountInfo = await getAccount(connection, associatedTokenAddress, 'confirmed', TOKEN_PROGRAM_ID);
     const mintInfo = await getMint(connection, rpsTokenMint);
-    
+
     return Number(tokenAccountInfo.amount) / (10 ** mintInfo.decimals);
   } catch (error) {
     // It's common for the token account not to exist, so handle this gracefully.
@@ -318,16 +318,16 @@ export const checkSufficientBalance = async (
   // Validate parameters
   if (!payer) throw new TokenServiceError("Invalid payer public key");
   if (amount <= 0n) throw new TokenServiceError("Amount must be greater than 0");
-  
+
   if (currency === CurrencyMode.SOL) {
     // For SOL, add estimated transaction fee to the required amount
     const requiredLamports = amount + BigInt(ESTIMATED_TRANSACTION_FEE);
     const balance = await connection.getBalance(payer);
-    
+
     // Ensure minimum SOL balance is maintained for rent exemption
     const minimumSolBalance = MINIMUM_SOL_BALANCE_FOR_RENT * LAMPORTS_PER_SOL;
     const availableLamports = balance - minimumSolBalance;
-    
+
     if (availableLamports < requiredLamports) {
       throw new InsufficientFundsError(
         'SOL', 
@@ -338,7 +338,7 @@ export const checkSufficientBalance = async (
     return true;
   } else if (currency === CurrencyMode.RPSTOKEN) {
     if (!mint) throw new TokenServiceError("Token mint is required for RPS Token transactions");
-    
+
     try {
       // Check SOL balance for transaction fee
       const solBalance = await connection.getBalance(payer);
@@ -349,7 +349,7 @@ export const checkSufficientBalance = async (
           solBalance / LAMPORTS_PER_SOL
         );
       }
-      
+
       // Check token balance
       const ata = await getAssociatedTokenAddress(mint, payer);
       try {
@@ -456,16 +456,16 @@ export const simulateTransaction = async (
     const { blockhash } = await connection.getLatestBlockhash();
     transaction.recentBlockhash = blockhash;
   }
-  
+
   // If signers are provided, sign the transaction
   if (signers && signers.length > 0) {
     transaction.sign(...signers);
   }
-  
+
   try {
     // Simulate the transaction
     const simulation = await connection.simulateTransaction(transaction);
-    
+
     // Check for simulation errors
     if (simulation.value.err) {
       const errorMsg = typeof simulation.value.err === 'string' 
@@ -473,7 +473,7 @@ export const simulateTransaction = async (
         : JSON.stringify(simulation.value.err);
       throw new TransactionSimulationError(errorMsg, simulation.value.logs);
     }
-    
+
     return simulation;
   } catch (error) {
     if (error instanceof TransactionSimulationError) throw error;
@@ -499,7 +499,7 @@ export const createEntryFeeTransaction = async ({
   if (!playerPublicKey) throw new TokenServiceError("Invalid player public key");
   if (!gameAccountPublicKey) throw new TokenServiceError("Invalid game account public key");
   if (entryFeeInLamportsOrSmallestUnit < 0n) throw new TokenServiceError("Entry fee cannot be negative");
-  
+
   // Check for duplicate transaction
   const txFingerprint = TransactionTracker.generateFingerprint(
     playerPublicKey, 
@@ -507,17 +507,17 @@ export const createEntryFeeTransaction = async ({
     entryFeeInLamportsOrSmallestUnit,
     currencyMode
   );
-  
+
   if (txTracker.isDuplicate(txFingerprint)) {
     throw new TokenServiceError("Duplicate transaction detected. Please wait for the previous transaction to complete.");
   }
-  
+
   // Apply rate limiting
   const rateCheck = rateLimiter.checkLimit();
   if (!rateCheck.allowed) {
     throw new RateLimitError(rateCheck.waitTime);
   }
-  
+
   // Check if player has sufficient balance
   await checkSufficientBalance(
     connection, 
@@ -584,10 +584,10 @@ export const createEntryFeeTransaction = async ({
     }
     throw new TokenServiceError(`Failed to simulate entry fee transaction: ${error.message}`);
   }
-  
+
   // Track this transaction
   txTracker.addTransaction(txFingerprint);
-  
+
   return transaction;
 };
 
@@ -611,13 +611,13 @@ export const buildFeeTransferInstructions = async (
   if (!payer) throw new TokenServiceError("Invalid payer public key");
   if (!gameAccount) throw new TokenServiceError("Invalid game account public key");
   if (amount < 0n) throw new TokenServiceError("Amount cannot be negative");
-  
+
   // Check if player has sufficient balance for the full amount
   if (amount > 0n) {
     await checkSufficientBalance(connection, payer, amount, currency, 
       currency === CurrencyMode.RPSTOKEN ? mint : undefined);
   }
-  
+
   const fee = calculateFee(amount);
   const potAmount = amount - fee;
   const ix: TransactionInstruction[] = [];
@@ -633,7 +633,7 @@ export const buildFeeTransferInstructions = async (
     }
   } else if (currency === CurrencyMode.RPSTOKEN) {
     if (!mint) throw new TokenServiceError("Token mint is required for RPS Token transactions");
-    
+
     const playerAta = await getOrCreateATA(connection, payer, payer, mint, ix);
     const gameAta   = await getOrCreateATA(connection, payer, gameAccount, mint, ix);
     const feeAta    = await getOrCreateATA(connection, payer, FEE_COLLECTOR_PUBKEY, mint, ix);
@@ -647,7 +647,7 @@ export const buildFeeTransferInstructions = async (
   } else {
     throw new TokenServiceError("Unsupported currency mode");
   }
-  
+
   return ix;
 };
 
@@ -678,40 +678,40 @@ export const sendTransactionWithRetry = async (
 ): Promise<string> => {
   const maxRetries = options?.maxRetries ?? TRANSACTION_RETRY_COUNT;
   const retryDelay = options?.retryDelayMs ?? TRANSACTION_RETRY_DELAY;
-  
+
   // Generate fingerprint for tracking
   const txFingerprint = `${transaction.feePayer?.toBase58()}-${Date.now()}`;
-  
+
   // Try to simulate first if not skipping preflight
   if (!options?.skipPreflight) {
     await simulateTransaction(connection, transaction, signers);
   }
-  
+
   // Apply rate limiting
   const rateCheck = rateLimiter.checkLimit();
   if (!rateCheck.allowed) {
     throw new RateLimitError(rateCheck.waitTime);
   }
-  
+
   let lastError: Error | null = null;
-  
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       // If not first attempt, get a new blockhash
       if (attempt > 0) {
         const { blockhash } = await connection.getLatestBlockhash();
         transaction.recentBlockhash = blockhash;
-        
+
         // Re-sign with the new blockhash
         transaction.signatures = [];
         if (signers.length > 0) {
           transaction.sign(...signers);
         }
-        
+
         // Wait before retrying
         await new Promise(resolve => setTimeout(resolve, retryDelay));
       }
-      
+
       // Send the transaction
       const signature = await sendAndConfirmTransaction(
         connection,
@@ -723,14 +723,14 @@ export const sendTransactionWithRetry = async (
           maxRetries: 1, // We're handling retries ourselves
         }
       );
-      
+
       // Mark transaction as confirmed in tracker
       txTracker.updateStatus(txFingerprint, 'confirmed');
-      
+
       return signature;
     } catch (error) {
       lastError = error;
-      
+
       // Check if error is retryable
       const isRetryable = 
         error.message?.includes('blockhash not found') ||
@@ -738,17 +738,17 @@ export const sendTransactionWithRetry = async (
         error.message?.includes('timed out') ||
         error.message?.includes('Connection closed') ||
         error.message?.includes('rate limited');
-      
+
       if (!isRetryable || attempt >= maxRetries) {
         // Mark transaction as failed in tracker
         txTracker.updateStatus(txFingerprint, 'failed');
         break;
       }
-      
+
       console.warn(`Transaction attempt ${attempt + 1} failed with error: ${error.message}. Retrying...`);
     }
   }
-  
+
   // If we get here, all retries failed
   throw new TokenServiceError(`Transaction failed after ${maxRetries + 1} attempts: ${lastError?.message}`);
 };
@@ -886,4 +886,3 @@ export const getFreeRPSTokens = async (
 if (typeof window !== 'undefined' && typeof window.Buffer === 'undefined') {
   window.Buffer = Buffer;
 }
-

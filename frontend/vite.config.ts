@@ -33,7 +33,15 @@ export default defineConfig({
       transformMixedEsModules: true,
     },
     rollupOptions: {
+      external: [
+        'rpc-websockets/dist/lib/client',
+        'rpc-websockets/dist/lib/client/websocket.browser'
+      ],
       output: {
+        globals: {
+          'rpc-websockets/dist/lib/client': 'RpcWebSockets',
+          'rpc-websockets/dist/lib/client/websocket.browser': 'RpcWebSockets'
+        },
         manualChunks: {
           'solana': ['@solana/web3.js'],
         },
