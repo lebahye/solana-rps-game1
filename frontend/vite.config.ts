@@ -27,6 +27,8 @@ export default defineConfig({
       '@solana/wallet-adapter-base',
       '@solana/wallet-adapter-react',
       '@solana/wallet-adapter-phantom',
+      '@solana/spl-token',
+      'rpc-websockets',
       'buffer',
       'process/browser',
       'util'
