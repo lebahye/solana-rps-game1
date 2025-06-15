@@ -1,3 +1,4 @@
+
 {
   "name": "solana-rps-game",
   "private": true,
@@ -6,7 +7,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "vite preview --host 0.0.0.0 --port 5000"
   },
   "dependencies": {
     "@solana/web3.js": "1.98.0",
@@ -14,11 +16,11 @@
     "@solana/wallet-adapter-react": "0.15.36",
     "@solana/wallet-adapter-react-ui": "0.9.36",
     "@solana/wallet-adapter-wallets": "0.19.33",
-    "@solana/wallet-adapter-backpack": "^0.1.12",
-    "@solana/wallet-adapter-coinbase": "^0.1.18",
-    "@solana/wallet-adapter-ledger": "^0.12.1",
-    "@solana/wallet-adapter-phantom": "^0.9.24",
-    "@solana/wallet-adapter-solflare": "^0.6.28",
+    "@solana/wallet-adapter-backpack": "0.1.12",
+    "@solana/wallet-adapter-coinbase": "0.1.18",
+    "@solana/wallet-adapter-ledger": "0.12.1",
+    "@solana/wallet-adapter-phantom": "0.9.24",
+    "@solana/wallet-adapter-solflare": "0.6.28",
     "borsh": "0.7.0",
     "buffer": "6.0.3",
     "js-sha256": "0.11.0",
@@ -31,10 +33,9 @@
     "@types/react-dom": "18.3.5",
     "@vitejs/plugin-react": "4.3.4",
     "typescript": "5.6.2",
-    "vite": "6.0.5",
-    "tailwindcss": "^3.4.1",
-    "tailwindcss-animate": "^1.0.7",
-    "autoprefixer": "^10.4.19",
-    "postcss": "^8.4.38"
+    "vite": "5.1.4",
+    "tailwindcss": "3.4.1",
+    "autoprefixer": "10.4.19",
+    "postcss": "8.4.38"
   }
 }

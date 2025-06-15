@@ -1,21 +1,12 @@
+
 {
-  "name": "solana-rps-game",
+  "name": "solana-rps-game-root",
   "version": "1.0.0",
-  "description": "A full-stack decentralized Rock Paper Scissors game built on the Solana blockchain",
   "private": true,
   "scripts": {
-    "frontend:dev": "cd frontend && bun dev",
-    "frontend:build": "cd frontend && bun build",
-    "backend:build": "cd backend/solana-program && cargo build-bpf",
-    "test": "echo \"No tests specified\" && exit 0"
-  },
-  "keywords": [
-    "solana",
-    "blockchain",
-    "game",
-    "rock-paper-scissors",
-    "crypto"
-  ],
-  "author": "",
-  "license": "MIT"
+    "postinstall": "cd frontend && npm install --legacy-peer-deps",
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "start": "cd frontend && npm run preview -- --host 0.0.0.0 --port 5000"
+  }
 }
