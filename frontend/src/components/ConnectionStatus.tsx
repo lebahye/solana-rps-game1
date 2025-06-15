@@ -76,7 +76,4 @@ export const ConnectionStatus: React.FC = () => {
   );
 };
 
-import React from 'react';
-import { useWallet } from '@solana/wallet-adapter-react';
-
 

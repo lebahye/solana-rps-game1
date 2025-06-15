@@ -123,6 +123,39 @@ class TransactionRateLimiter {
 // Singleton instance
 const rateLimiter = new TransactionRateLimiter();
 
+// Export aliases for compatibility
+export const FEE_ACCOUNT = FEE_COLLECTOR_PUBKEY;
+export const RPS_TOKEN_MINT = RPS_TOKEN_MINT_PUBKEY;
+
+// Export helper functions
+export const calculateBonusPot = (entryFee: number, currency: CurrencyMode): number => {
+  if (currency === CurrencyMode.RPSTOKEN) {
+    return 0.05; // 5% bonus for RPS token games
+  }
+  return 0;
+};
+
+export const createPaymentTransaction = (
+  amount: bigint,
+  fromPubkey: PublicKey,
+  toPubkey: PublicKey,
+  currency: CurrencyMode
+): Transaction => {
+  const transaction = new Transaction();
+  
+  if (currency === CurrencyMode.SOL) {
+    transaction.add(
+      SystemProgram.transfer({
+        fromPubkey,
+        toPubkey,
+        lamports: amount,
+      })
+    );
+  }
+  
+  return transaction;
+};
+
 // --- Transaction Tracking ---
 // Track recent transactions to prevent duplicates
 interface TrackedTransaction {

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@solana/spl-token": "^0.4.13",
-    "rpc-websockets": "^9.1.1"
+    "rpc-websockets": "^9.1.1",
+    "ws": "^8.18.2"
   }
 }

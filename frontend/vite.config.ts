@@ -14,6 +14,8 @@ export default defineConfig({
       'process': 'process/browser',
       'util': 'util',
       '@solana/web3.js': path.resolve(__dirname, 'node_modules/@solana/web3.js'),
+      'rpc-websockets/dist/lib/client': 'rpc-websockets/dist/index.umd.js',
+      'rpc-websockets/dist/lib/client/websocket.browser': 'rpc-websockets/dist/index.umd.js',
     },
   },
   optimizeDeps: {
@@ -39,6 +41,10 @@ export default defineConfig({
       transformMixedEsModules: true,
     },
     rollupOptions: {
+      external: [
+        'rpc-websockets/dist/lib/client',
+        'rpc-websockets/dist/lib/client/websocket.browser'
+      ],
       output: {
         manualChunks: {
           'solana': ['@solana/web3.js'],
