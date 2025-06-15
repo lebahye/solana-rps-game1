@@ -1007,8 +1007,6 @@ export class RPSGameClient {
         }
       }
 
-```python
-
       return activeGames;
     } catch (error) {
       this.notifyError(error as Error);

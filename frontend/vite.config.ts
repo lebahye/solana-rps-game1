@@ -13,9 +13,6 @@ export default defineConfig({
       'buffer': 'buffer',
       'process': 'process/browser',
       'util': 'util',
-      '@solana/web3.js': path.resolve(__dirname, 'node_modules/@solana/web3.js'),
-      'rpc-websockets/dist/lib/client': path.resolve(__dirname, 'node_modules/rpc-websockets/dist/index.umd.js'),
-      'rpc-websockets/dist/lib/client/websocket.browser': path.resolve(__dirname, 'node_modules/rpc-websockets/dist/index.umd.js'),
     },
   },
   optimizeDeps: {
